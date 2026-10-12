@@ -1,5 +1,8 @@
-// moneyfree LINE Webhook:驗證簽章、綁定擁有者、建立圖文選單、只對擁有者提供 AI 助理
-import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+// moneyfree LINE Webhook:驗證簽章、綁定擁有者、建立圖文選單、只對擁有者提供 AI 助理與管理工具
+import { mfDb, mfLine, mfReply } from "./mf_line.ts";
+import { MF_HELP_TEXT, mfOwnerCommand, mfOwnerImage } from "./mf_owner_tools.ts";
+
+declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
 
 const MF_OPENAI_MODEL = "gpt-4o-mini";
 const MF_SITE = "https://mia-ai131419.github.io/moneyfree";
@@ -7,9 +10,7 @@ const MF_LIFF_HALF = "2011977982-TKjnvFHN";
 const MF_LIFF_FULL = "2011977982-Oqw2Ao0M";
 const MF_CONTACT = "https://line.me/ti/p/KSNRRjbtdx";
 const MF_MENU_NAME = "moneyfree-main";
-const mfToken = Deno.env.get("LINE_TOKEN") || "";
 const mfSecret = Deno.env.get("LINE_secret") || "";
-const mfDb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
 async function mfVerifySignature(raw: string, signature: string | null) {
   if (!signature || !mfSecret) return false;
@@ -20,20 +21,6 @@ async function mfVerifySignature(raw: string, signature: string | null) {
   let diff = 0;
   for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ signature.charCodeAt(i);
   return diff === 0;
-}
-
-function mfLine(path: string, init: RequestInit = {}, host = "api.line.me") {
-  return fetch(`https://${host}${path}`, {
-    ...init,
-    headers: { Authorization: `Bearer ${mfToken}`, "Content-Type": "application/json", ...(init.headers || {}) },
-  });
-}
-
-async function mfReply(replyToken: string, text: string) {
-  await mfLine("/v2/bot/message/reply", {
-    method: "POST",
-    body: JSON.stringify({ replyToken, messages: [{ type: "text", text: text.slice(0, 4900) }] }),
-  });
 }
 
 async function mfSetupRichMenu() {
@@ -58,7 +45,7 @@ async function mfSetupRichMenu() {
   });
   const { richMenuId } = await created.json();
   if (!richMenuId) throw new Error("建立選單失敗");
-  const img = await fetch(`${MF_SITE}/assets/richmenu.jpg`);
+  const img = await fetch(`${MF_SITE}/assets/richmenu.jpg?v=${Date.now()}`);
   if (!img.ok) throw new Error("選單圖片下載失敗");
   const up = await mfLine(`/v2/bot/richmenu/${richMenuId}/content`, {
     method: "POST", headers: { "Content-Type": "image/jpeg" }, body: await img.arrayBuffer(),
@@ -111,7 +98,7 @@ async function mfAskAI(ownerId: string, question: string) {
           content: `你是 MoneyFree LINE 官方帳號擁有者的專屬金融助理。用繁體中文(台灣用語),語氣溫暖、清楚、簡短。
 你可以回答金融相關問題,並根據下方資料庫內容回答用戶資料、使用狀況、問答統計與細節。
 不做醫療診斷,遇到急症請對方立即就醫;不保證投資報酬。資料中沒有的內容就說不知道,不要編造。
-LINE 純文字回覆,不要用 Markdown 語法。
+LINE 純文字回覆,不要用 Markdown 語法。若擁有者問有哪些功能,告訴他輸入「指令」查看。
 【資料庫(JSON)】
 ${context}`,
         },
@@ -134,9 +121,9 @@ async function mfHandleEvent(ev: Record<string, any>) {
     if (name) await mfDb.from("mf_users").update({ display_name: name }).eq("line_user_id", userId);
     return;
   }
-  if (ev.type !== "message" || ev.message?.type !== "text") return;
-  const text = String(ev.message.text || "").trim();
+  if (ev.type !== "message") return;
   const { data: owner } = await mfDb.from("mf_users").select("line_user_id").eq("is_owner", true).maybeSingle();
+  const text = ev.message?.type === "text" ? String(ev.message.text || "").trim() : "";
 
   // 尚無擁有者:第一位傳「綁定管理員」的人成為擁有者(之後鎖定)
   if (!owner) {
@@ -145,16 +132,22 @@ async function mfHandleEvent(ev: Record<string, any>) {
     await mfDb.from("mf_users").update({ is_owner: true, display_name: name }).eq("line_user_id", userId);
     let menuMsg = "圖文選單已建立。";
     try { await mfSetupRichMenu(); } catch (e) { menuMsg = `圖文選單建立失敗:${(e as Error).message}。網站上線後傳「更新選單」重試。`; }
-    await mfReply(ev.replyToken, `已將你設為 MoneyFree 擁有者 ✅\n${menuMsg}\n之後直接傳訊息就能問我金融問題或用戶資料。`);
+    await mfReply(ev.replyToken, `已將你設為 MoneyFree 擁有者 ✅\n${menuMsg}\n\n${MF_HELP_TEXT}`);
     return;
   }
   if (owner.line_user_id !== userId) return; // 非擁有者:不回應
 
+  if (ev.message?.type === "image") { await mfOwnerImage(ev, userId); return; }
+  if (!text) return;
+
   if (text === "更新選單") {
-    try { await mfSetupRichMenu(); await mfReply(ev.replyToken, "圖文選單已更新 ✅"); }
+    try { await mfSetupRichMenu(); await mfReply(ev.replyToken, "圖文選單已更新 ✅(若沒看到,關閉聊天室再打開)"); }
     catch (e) { await mfReply(ev.replyToken, `更新失敗:${(e as Error).message}`); }
     return;
   }
+  const ownerTask = mfOwnerCommand(ev, userId, text);
+  if (ownerTask) { await ownerTask; return; }
+
   const answer = await mfAskAI(userId, text);
   await mfDb.from("mf_chat_logs").insert([
     { line_user_id: userId, role: "user", content: text.slice(0, 2000) },
@@ -170,8 +163,12 @@ Deno.serve(async (req) => {
     return new Response("invalid signature", { status: 401 });
   }
   const body = JSON.parse(raw || "{}");
-  for (const ev of body.events || []) {
-    try { await mfHandleEvent(ev); } catch (e) { console.error("mf-line-webhook event error", e); }
-  }
+  // 依序處理事件(照片暫存需保持順序),並在背景執行,讓 LINE 立即收到 200
+  const work = (async () => {
+    for (const ev of body.events || []) {
+      try { await mfHandleEvent(ev); } catch (e) { console.error("mf-line-webhook event error", e); }
+    }
+  })();
+  EdgeRuntime.waitUntil(work);
   return new Response("ok", { status: 200 });
 });
