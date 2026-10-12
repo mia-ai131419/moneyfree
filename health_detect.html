@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>健康大數據檢測</title>
+<link rel="stylesheet" href="assets/mf_style.css">
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="assets/mf_common.js"></script>
+</head>
+<body>
+<div class="mf-wrap">
+  <div class="mf-header">
+    <div class="mf-brand">MONEYFREE</div>
+    <h1 class="mf-title">健康大數據檢測</h1>
+    <p class="mf-sub">拍一張正臉照,AI 依 15 項外觀觀察給出氣色報告</p>
+  </div>
+
+  <div id="mf_loading" class="mf-loading"><div class="mf-spinner"></div><span id="mf_loading_text">載入中…</span></div>
+
+  <div id="mf_intro" class="mf-card mf-hidden">
+    <h2>拍照小提醒</h2>
+    <p class="mf-note">・自然光、正面、不戴口罩與墨鏡<br>・素顏或淡妝較準確<br>・每人每月可檢測 1 次</p>
+    <img id="mf_preview_img" class="mf-photo-preview mf-hidden" alt="照片預覽">
+    <input id="mf_file" type="file" accept="image/*" capture="user" class="mf-hidden">
+    <button id="mf_pick" class="mf-btn mf-ghost">拍照 / 選擇照片</button>
+    <button id="mf_submit" class="mf-btn" disabled>開始分析</button>
+    <div id="mf_err" class="mf-error"></div>
+    <div class="mf-disclaimer">照片只用於本次分析,不會被保存。結果僅供健康參考,不能取代醫師診斷;身體不適請立即就醫。</div>
+  </div>
+
+  <div id="mf_report" class="mf-hidden">
+    <div class="mf-card mf-score-big">
+      <div class="mf-label" id="mf_month"></div>
+      <div class="mf-num" id="mf_total">--</div>
+      <div class="mf-label">綜合氣色分數(滿分 100)</div>
+      <p id="mf_summary" style="text-align:left"></p>
+    </div>
+    <div class="mf-card"><h2>15 項觀察</h2><div id="mf_items"></div></div>
+    <div class="mf-card"><h2>生活建議</h2><ul id="mf_tips"></ul>
+      <div class="mf-disclaimer">本報告為外觀觀察,僅供健康參考,不能取代醫師診斷;如有不適或急症請立即就醫。下次檢測:下個月。</div>
+    </div>
+    <button class="mf-btn mf-ghost" style="margin-top:14px" onclick="mfClose()">關閉</button>
+  </div>
+</div>
+<script>
+const MF_ITEMS = [
+  ['complexion', '氣色紅潤度'], ['tone_even', '膚色均勻度'], ['radiance', '皮膚光澤度'],
+  ['eye_energy', '眼神精神度'], ['dark_circles', '黑眼圈改善度'], ['eye_puffiness', '眼周浮腫改善度'],
+  ['lip_color', '唇色健康度'], ['face_puffiness', '臉部浮腫改善度'], ['fatigue_lines', '疲勞紋改善度'],
+  ['blemish', '痘痘泛紅改善度'], ['relaxation', '表情放鬆度'], ['posture', '臉部對稱與姿態'],
+  ['hair', '頭髮光澤度'], ['hydration', '皮膚水潤度'], ['vitality', '整體活力感'],
+];
+let mfImageData = null;
+
+function mfRenderReport(mfRec) {
+  document.getElementById('mf_month').textContent = `${mfRec.month} 檢測報告`;
+  document.getElementById('mf_total').textContent = mfRec.total;
+  const mfS = mfRec.scores || {};
+  document.getElementById('mf_summary').textContent = mfS.summary || mfRec.summary || '';
+  document.getElementById('mf_items').innerHTML = MF_ITEMS.map(([k, label]) => {
+    const v = Math.max(0, Math.min(100, Number(mfS.scores?.[k] ?? 0)));
+    return `<div class="mf-bar-row"><div class="mf-bar-head"><span>${label}</span><b>${v}</b></div>
+      <div class="mf-bar"><i style="width:${v}%"></i></div>
+      <div class="mf-bar-note">${mfEsc(mfS.notes?.[k] || '')}</div></div>`;
+  }).join('');
+  document.getElementById('mf_tips').innerHTML = (mfS.tips || []).map((t) => `<li>${mfEsc(t)}</li>`).join('');
+  mfShow('mf_intro', false); mfShow('mf_loading', false); mfShow('mf_report');
+}
+
+function mfResize(mfFile) {
+  return new Promise((resolve, reject) => {
+    const mfImg = new Image();
+    mfImg.onload = () => {
+      const mfMax = 900;
+      const r = Math.min(1, mfMax / Math.max(mfImg.width, mfImg.height));
+      const c = document.createElement('canvas');
+      c.width = Math.round(mfImg.width * r); c.height = Math.round(mfImg.height * r);
+      c.getContext('2d').drawImage(mfImg, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(mfImg.src);
+      resolve(c.toDataURL('image/jpeg', 0.85));
+    };
+    mfImg.onerror = () => reject(new Error('無法讀取照片'));
+    mfImg.src = URL.createObjectURL(mfFile);
+  });
+}
+
+document.getElementById('mf_pick').onclick = () => document.getElementById('mf_file').click();
+document.getElementById('mf_file').onchange = async (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  try {
+    mfImageData = await mfResize(f);
+    const p = document.getElementById('mf_preview_img');
+    p.src = mfImageData; p.classList.remove('mf-hidden');
+    document.getElementById('mf_submit').disabled = false;
+    document.getElementById('mf_pick').textContent = '重新拍照';
+  } catch (err) { document.getElementById('mf_err').textContent = err.message; }
+};
+document.getElementById('mf_submit').onclick = async () => {
+  if (!mfImageData) return;
+  document.getElementById('mf_err').textContent = '';
+  mfShow('mf_intro', false); mfShow('mf_loading');
+  document.getElementById('mf_loading_text').textContent = 'AI 分析中,約需 10–20 秒…';
+  try {
+    const r = await mfApi('health_submit', { image: mfImageData });
+    if (r.mfPreview) { mfToast('預覽模式不會送出分析'); mfShow('mf_loading', false); mfShow('mf_intro'); return; }
+    mfRenderReport(r.record);
+  } catch (err) {
+    if (err.mfStatus === 409 && err.mfData.record) { mfToast('本月已檢測過'); mfRenderReport(err.mfData.record); return; }
+    mfShow('mf_loading', false); mfShow('mf_intro');
+    document.getElementById('mf_err').textContent = err.message;
+  }
+};
+
+(async () => {
+  try {
+    await mfInit(MF_CONFIG.liffHalf);
+    const r = await mfApi('health_status');
+    if (r.record) { mfRenderReport(r.record); return; }
+    mfShow('mf_loading', false); mfShow('mf_intro');
+  } catch (err) {
+    mfShow('mf_loading', false); mfShow('mf_intro');
+    document.getElementById('mf_err').textContent = err.message;
+  }
+})();
+</script>
+</body>
+</html>

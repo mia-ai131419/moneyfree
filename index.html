@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MoneyFree 財務服務</title>
+<link rel="stylesheet" href="assets/mf_style.css">
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="assets/mf_common.js"></script>
+</head>
+<body>
+<div class="mf-wrap">
+  <div class="mf-header">
+    <div class="mf-brand">MONEYFREE</div>
+    <h1 class="mf-title">財務服務中心</h1>
+    <p class="mf-sub">請從 LINE 圖文選單開啟各項服務</p>
+  </div>
+  <div id="mf_router" class="mf-loading"><div class="mf-spinner"></div>載入中…</div>
+  <div id="mf_menu" class="mf-card mf-menu mf-hidden">
+    <h2>服務項目</h2>
+    <a href="health_detect.html">健康大數據檢測</a>
+    <a href="money_health.html">財務健康度檢測</a>
+    <a href="personal_info.html">個人資訊填寫</a>
+    <a id="mf_contact" href="#">聯絡專員</a>
+  </div>
+</div>
+<script>
+// LIFF 入口:LIFF URL 例如 https://liff.line.me/{ID}/money_health.html
+// LINE 會開啟本頁並帶 liff.state,依目標頁選擇對應 LIFF ID 初始化後自動導向
+(async () => {
+  document.getElementById('mf_contact').href = MF_CONFIG.contactUrl;
+  const mfState = new URLSearchParams(location.search).get('liff.state') || '';
+  const mfAllowed = ['health_detect.html', 'money_health.html', 'personal_info.html'];
+  const mfTarget = mfAllowed.find((p) => mfState.includes(p));
+  if (!mfTarget || typeof liff === 'undefined') {
+    mfShow('mf_router', false); mfShow('mf_menu');
+    return;
+  }
+  try {
+    const mfId = mfTarget === 'personal_info.html' ? MF_CONFIG.liffFull : MF_CONFIG.liffHalf;
+    await liff.init({ liffId: mfId }); // 初始化後 LIFF 會自動導向 liff.state 指定的頁面
+  } catch (e) {
+    location.replace(mfTarget);
+  }
+})();
+</script>
+</body>
+</html>

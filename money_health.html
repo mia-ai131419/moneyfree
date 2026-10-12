@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>財務健康度檢測</title>
+<link rel="stylesheet" href="assets/mf_style.css">
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script src="assets/mf_common.js"></script>
+<script src="assets/mf_quiz_data.js"></script>
+</head>
+<body>
+<div class="mf-wrap">
+  <div class="mf-header">
+    <div class="mf-brand">MONEYFREE</div>
+    <h1 class="mf-title">財務健康度檢測</h1>
+    <p class="mf-sub">10 道情境題,不用填數字,約 2 分鐘</p>
+  </div>
+
+  <div id="mf_loading" class="mf-loading"><div class="mf-spinner"></div>載入中…</div>
+
+  <div id="mf_start" class="mf-card mf-hidden">
+    <h2>你是哪一種理財性格?</h2>
+    <p class="mf-note">憑直覺選最接近你的答案,測出你的財務彈性、抗壓力、投資回報、資產健康與成長度。</p>
+    <button class="mf-btn" id="mf_go">開始測驗</button>
+    <button class="mf-btn mf-ghost mf-hidden" id="mf_last">查看上次結果</button>
+    <div id="mf_err" class="mf-error"></div>
+  </div>
+
+  <div id="mf_quiz" class="mf-card mf-hidden">
+    <div class="mf-progress"><i id="mf_bar" style="width:0%"></i></div>
+    <div class="mf-q-count" id="mf_count"></div>
+    <p class="mf-q-text" id="mf_q"></p>
+    <div id="mf_opts"></div>
+    <button class="mf-btn mf-ghost" id="mf_back">上一題</button>
+  </div>
+
+  <div id="mf_result" class="mf-hidden">
+    <div class="mf-card mf-persona">
+      <div class="mf-icon" id="mf_icon"></div>
+      <div class="mf-note">你的理財性格是</div>
+      <div class="mf-name" id="mf_pname"></div>
+      <div class="mf-score-big"><span class="mf-num" id="mf_avg"></span><div class="mf-label">財務健康總分</div></div>
+      <p id="mf_pdesc" style="text-align:left"></p>
+    </div>
+    <div class="mf-card"><h2>五力雷達圖</h2><canvas id="mf_chart" height="280"></canvas><div id="mf_dimbars"></div></div>
+    <div class="mf-card"><h2>給你的建議</h2><ul id="mf_tips"></ul>
+      <div class="mf-disclaimer">本測驗為財務健康自我檢視,不構成投資建議。想進一步規劃,歡迎點選「聯絡專員」。</div>
+    </div>
+    <button class="mf-btn" style="margin-top:14px" id="mf_retry">重新測驗</button>
+    <button class="mf-btn mf-ghost" onclick="mfClose()">關閉</button>
+  </div>
+</div>
+<script>
+let mfAnswers = []; let mfIdx = 0; let mfChart = null; let mfLast = null;
+
+function mfRenderQ() {
+  const qq = MF_QUESTIONS[mfIdx];
+  document.getElementById('mf_bar').style.width = `${(mfIdx / MF_QUESTIONS.length) * 100}%`;
+  document.getElementById('mf_count').textContent = `第 ${mfIdx + 1} / ${MF_QUESTIONS.length} 題`;
+  document.getElementById('mf_q').textContent = qq.q;
+  document.getElementById('mf_opts').innerHTML = qq.o.map((o, i) =>
+    `<button class="mf-option${mfAnswers[mfIdx] === i ? ' mf-picked' : ''}" data-i="${i}">${mfEsc(o[0])}</button>`).join('');
+  document.getElementById('mf_back').style.visibility = mfIdx ? 'visible' : 'hidden';
+}
+
+function mfRenderResult(mfDims) {
+  const dims = mfDims;
+  const avg = Math.round(MF_DIMS.reduce((s, [k]) => s + dims[k], 0) / MF_DIMS.length);
+  const persona = MF_PERSONAS.find((p) => avg >= p.min);
+  const weak = [...MF_DIMS].sort((a, b) => dims[a[0]] - dims[b[0]]).slice(0, 2).map(([k]) => k);
+  document.getElementById('mf_icon').textContent = persona.icon;
+  document.getElementById('mf_pname').textContent = persona.name;
+  document.getElementById('mf_pdesc').textContent = persona.desc;
+  document.getElementById('mf_avg').textContent = avg;
+  document.getElementById('mf_dimbars').innerHTML = MF_DIMS.map(([k, label]) =>
+    `<div class="mf-bar-row"><div class="mf-bar-head"><span>${label}</span><b>${dims[k]}</b></div>
+     <div class="mf-bar"><i style="width:${dims[k]}%"></i></div></div>`).join('');
+  document.getElementById('mf_tips').innerHTML = weak.map((k) => `<li>${MF_DIM_TIPS[k]}</li>`).join('');
+  mfShow('mf_quiz', false); mfShow('mf_start', false); mfShow('mf_loading', false); mfShow('mf_result');
+  if (typeof Chart === 'undefined') return;
+  if (mfChart) mfChart.destroy();
+  mfChart = new Chart(document.getElementById('mf_chart'), {
+    type: 'radar',
+    data: { labels: MF_DIMS.map((d) => d[1]), datasets: [{
+      data: MF_DIMS.map(([k]) => dims[k]), fill: true,
+      backgroundColor: 'rgba(201,162,39,.25)', borderColor: '#c9a227', pointBackgroundColor: '#22324d',
+    }] },
+    options: { plugins: { legend: { display: false } },
+      scales: { r: { min: 0, max: 100, ticks: { stepSize: 25, display: false },
+        grid: { color: '#ccddff' }, angleLines: { color: '#ccddff' },
+        pointLabels: { color: '#22324d', font: { size: 13, weight: 'bold' } } } } },
+  });
+}
+
+async function mfFinish() {
+  const r = mfScoreQuiz(mfAnswers);
+  mfShow('mf_quiz', false); mfShow('mf_loading');
+  try { await mfApi('quiz_submit', { answers: mfAnswers, dims: r.mfDims, persona: r.mfPersona.name }); }
+  catch (err) { mfToast('結果儲存失敗,但仍可查看'); }
+  mfRenderResult(r.mfDims);
+}
+
+document.getElementById('mf_opts').onclick = (e) => {
+  const b = e.target.closest('.mf-option');
+  if (!b) return;
+  mfAnswers[mfIdx] = Number(b.dataset.i);
+  b.classList.add('mf-picked');
+  setTimeout(() => {
+    if (mfIdx < MF_QUESTIONS.length - 1) { mfIdx += 1; mfRenderQ(); } else mfFinish();
+  }, 180);
+};
+document.getElementById('mf_back').onclick = () => { if (mfIdx) { mfIdx -= 1; mfRenderQ(); } };
+const mfStartQuiz = () => {
+  mfAnswers = []; mfIdx = 0; mfRenderQ();
+  mfShow('mf_start', false); mfShow('mf_result', false); mfShow('mf_quiz'); window.scrollTo(0, 0);
+};
+document.getElementById('mf_go').onclick = mfStartQuiz;
+document.getElementById('mf_retry').onclick = mfStartQuiz;
+document.getElementById('mf_last').onclick = () => mfRenderResult(mfLast);
+
+(async () => {
+  try {
+    await mfInit(MF_CONFIG.liffHalf);
+    const r = await mfApi('quiz_latest');
+    if (r.record) { mfLast = r.record.dims; mfShow('mf_last'); }
+  } catch (err) { document.getElementById('mf_err').textContent = err.message; }
+  mfShow('mf_loading', false); mfShow('mf_start');
+})();
+</script>
+</body>
+</html>
