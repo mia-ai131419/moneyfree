@@ -24,7 +24,7 @@ body {
   line-height: 1.6;
 }
 .mf-wrap { max-width: 560px; margin: 0 auto; padding: 16px 16px 40px; }
-.mf-header { text-align: center; padding: 12px 0 4px; }
+.mf-header { text-align: center; padding: 16px 12px 12px; background: var(--mf-blue-accent); border-radius: var(--mf-radius); border-bottom: 3px solid var(--mf-gold); }
 .mf-brand { font-size: 12px; letter-spacing: .2em; color: var(--mf-gold-dark); font-weight: 700; }
 .mf-title { font-size: 22px; margin: 4px 0 2px; color: var(--mf-blue); }
 .mf-sub { font-size: 13px; color: var(--mf-muted); margin: 0; }
@@ -37,10 +37,10 @@ body {
 .mf-btn {
   display: block; width: 100%; border: 0; border-radius: 12px; padding: 14px;
   font-size: 16px; font-weight: 700; cursor: pointer;
-  background: linear-gradient(135deg, var(--mf-gold) 0%, var(--mf-gold-dark) 100%); color: #fff;
+  background: var(--mf-blue-accent); color: var(--mf-blue); border: 1.5px solid #a9c0f0;
 }
 .mf-btn:disabled { opacity: .5; cursor: not-allowed; }
-.mf-btn.mf-ghost { background: var(--mf-blue-soft); color: var(--mf-blue); }
+.mf-btn.mf-ghost { background: #fff; color: var(--mf-gold-dark); border: 1.5px solid var(--mf-gold); }
 .mf-btn + .mf-btn { margin-top: 10px; }
 .mf-note { font-size: 12px; color: var(--mf-muted); }
 .mf-disclaimer {
@@ -57,7 +57,7 @@ body {
 .mf-error { color: var(--mf-danger); font-size: 14px; margin-top: 10px; }
 .mf-toast {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%);
-  background: var(--mf-blue); color: #fff; padding: 10px 18px; border-radius: 999px;
+  background: var(--mf-blue-accent); color: var(--mf-blue); border: 1px solid var(--mf-gold); padding: 10px 18px; border-radius: 999px;
   font-size: 14px; box-shadow: 0 6px 18px rgba(0,0,0,.2); z-index: 9;
 }
 .mf-score-big { text-align: center; }
@@ -86,7 +86,7 @@ label.mf-field { display: block; margin: 12px 0 0; font-size: 14px; font-weight:
   border: 1.5px solid var(--mf-line); border-radius: 12px; background: #fff; font-size: 15px;
   color: var(--mf-text); cursor: pointer; font-family: inherit;
 }
-.mf-option:active, .mf-option.mf-picked { border-color: var(--mf-gold); background: var(--mf-gold-soft); }
+.mf-option:active, .mf-option.mf-picked { border-color: var(--mf-gold); background: var(--mf-blue-accent); }
 .mf-persona { text-align: center; }
 .mf-persona .mf-icon { font-size: 44px; }
 .mf-persona .mf-name { font-size: 22px; font-weight: 800; color: var(--mf-blue); }

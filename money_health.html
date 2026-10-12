@@ -79,7 +79,7 @@ function mfRenderResult(mfDims) {
      <div class="mf-bar"><i style="width:${dims[k]}%"></i></div></div>`).join('');
   document.getElementById('mf_tips').innerHTML = weak.map((k) => `<li>${MF_DIM_TIPS[k]}</li>`).join('');
   mfShow('mf_quiz', false); mfShow('mf_start', false); mfShow('mf_loading', false); mfShow('mf_result');
-  if (typeof Chart === 'undefined') return;
+  if (typeof Chart === 'undefined') { document.getElementById('mf_chart').style.display = 'none'; return; }
   if (mfChart) mfChart.destroy();
   mfChart = new Chart(document.getElementById('mf_chart'), {
     type: 'radar',
