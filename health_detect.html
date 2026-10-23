@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>健康大數據檢測</title>
-<link rel="stylesheet" href="assets/mf_style.css">
+<link rel="stylesheet" href="assets/mf_style.css?v=20261023b">
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-<script src="assets/mf_common.js"></script>
+<script src="assets/mf_common.js?v=20261023b"></script>
 </head>
 <body>
 <div class="mf-wrap">
@@ -42,9 +42,11 @@
       <h3 class="mf-sub-h">🥗 飲食建議</h3><ul id="mf_diet"></ul>
       <h3 class="mf-sub-h">💊 營養補充品</h3><ul id="mf_supplements"></ul>
       <h3 class="mf-sub-h">🏃 運動建議</h3><ul id="mf_exercise"></ul>
-      <div class="mf-disclaimer">本報告為外觀觀察,僅供健康參考,不能取代醫師診斷;營養補充品使用前請先諮詢醫師或藥師,如有不適或急症請立即就醫。下次檢測:下個月。</div>
+      <div class="mf-disclaimer">本報告為外觀觀察,僅供健康參考,不能取代醫師診斷;營養補充品使用前請先諮詢醫師或藥師,如有不適或急症請立即就醫。每人每月可檢測 1 次。</div>
     </div>
-    <button class="mf-btn mf-ghost" style="margin-top:14px" onclick="mfClose()">關閉</button>
+    <button class="mf-btn" style="margin-top:14px" id="mf_retest">再測一次</button>
+    <p class="mf-note mf-hidden" id="mf_quota_note" style="text-align:center;margin-top:14px">本月檢測額度已用完,下個月可以再測</p>
+    <button class="mf-btn mf-ghost" style="margin-top:10px" onclick="mfClose()">關閉</button>
   </div>
 </div>
 <script>
@@ -57,7 +59,10 @@ const MF_ITEMS = [
 ];
 let mfImageData = null;
 
-function mfRenderReport(mfRec) {
+function mfRenderReport(mfRec, mfRemaining = 0) {
+  mfShow('mf_retest', mfRemaining > 0);
+  mfShow('mf_quota_note', !(mfRemaining > 0));
+  document.getElementById('mf_retest').textContent = `再測一次(本月剩 ${mfRemaining} 次)`;
   document.getElementById('mf_month').textContent = `${mfRec.month} 檢測報告`;
   document.getElementById('mf_total').textContent = mfRec.total;
   const mfS = mfRec.scores || {};
@@ -95,6 +100,15 @@ function mfResize(mfFile) {
   });
 }
 
+document.getElementById('mf_retest').onclick = () => {
+  mfImageData = null;
+  document.getElementById('mf_file').value = '';
+  document.getElementById('mf_preview_img').classList.add('mf-hidden');
+  document.getElementById('mf_submit').disabled = true;
+  document.getElementById('mf_pick').textContent = '拍照 / 選擇照片';
+  document.getElementById('mf_err').textContent = '';
+  mfShow('mf_report', false); mfShow('mf_intro'); window.scrollTo(0, 0);
+};
 document.getElementById('mf_pick').onclick = () => document.getElementById('mf_file').click();
 document.getElementById('mf_file').onchange = async (e) => {
   const f = e.target.files[0];
@@ -115,9 +129,9 @@ document.getElementById('mf_submit').onclick = async () => {
   try {
     const r = await mfApi('health_submit', { image: mfImageData });
     if (r.mfPreview) { mfToast('預覽模式不會送出分析'); mfShow('mf_loading', false); mfShow('mf_intro'); return; }
-    mfRenderReport(r.record);
+    mfRenderReport(r.record, r.remaining);
   } catch (err) {
-    if (err.mfStatus === 409 && err.mfData.record) { mfToast('本月已檢測過'); mfRenderReport(err.mfData.record); return; }
+    if (err.mfStatus === 409 && err.mfData.record) { mfToast('本月額度已用完'); mfRenderReport(err.mfData.record, 0); return; }
     mfShow('mf_loading', false); mfShow('mf_intro');
     document.getElementById('mf_err').textContent = err.message;
   }
@@ -127,7 +141,7 @@ document.getElementById('mf_submit').onclick = async () => {
   try {
     await mfInit(MF_CONFIG.liffHalf);
     const r = await mfApi('health_status');
-    if (r.record) { mfRenderReport(r.record); return; }
+    if (r.record) { mfRenderReport(r.record, r.remaining); return; }
     mfShow('mf_loading', false); mfShow('mf_intro');
   } catch (err) {
     mfShow('mf_loading', false); mfShow('mf_intro');

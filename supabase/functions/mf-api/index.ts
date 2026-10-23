@@ -37,6 +37,25 @@ function mfMonth() {
   return new Date(Date.now() + 8 * 3600e3).toISOString().slice(0, 7); // 台灣時間 YYYY-MM
 }
 
+const MF_HEALTH_MONTHLY_QUOTA = 1;
+
+// 剩餘額度 = 每月額度 − 本期次數;本期起點 = 本月 1 日與「額度重置時間」(mf_settings)取較晚者
+async function mfHealthRemaining(uid: string) {
+  const monthStart = new Date(`${mfMonth()}-01T00:00:00+08:00`);
+  const { data: setting } = await mfDb.from("mf_settings").select("value").eq("key", "health_quota_reset_at").maybeSingle();
+  const resetAt = setting ? new Date(setting.value) : null;
+  const since = resetAt && resetAt > monthStart ? resetAt : monthStart;
+  const { count } = await mfDb.from("mf_health_checks").select("id", { count: "exact", head: true })
+    .eq("line_user_id", uid).gte("created_at", since.toISOString());
+  return Math.max(0, MF_HEALTH_MONTHLY_QUOTA - (count || 0));
+}
+
+async function mfLatestHealth(uid: string) {
+  const { data } = await mfDb.from("mf_health_checks").select("*").eq("line_user_id", uid).eq("month", mfMonth())
+    .order("created_at", { ascending: false }).limit(1).maybeSingle();
+  return data;
+}
+
 async function mfVerify(idToken: string) {
   const r = await fetch("https://api.line.me/oauth2/v2.1/verify", {
     method: "POST",
@@ -83,13 +102,13 @@ async function mfHandle(action: string, body: Record<string, unknown>, user: { u
   const uid = user.userId;
   switch (action) {
     case "health_status": {
-      const { data } = await mfDb.from("mf_health_checks").select("*").eq("line_user_id", uid).eq("month", mfMonth()).maybeSingle();
-      return mfJson({ record: data });
+      return mfJson({ record: await mfLatestHealth(uid), remaining: await mfHealthRemaining(uid) });
     }
     case "health_submit": {
       const month = mfMonth();
-      const { data: existing } = await mfDb.from("mf_health_checks").select("*").eq("line_user_id", uid).eq("month", month).maybeSingle();
-      if (existing) return mfJson({ error: "本月已完成檢測,下個月再來喔", record: existing }, 409);
+      if ((await mfHealthRemaining(uid)) <= 0) {
+        return mfJson({ error: "本月檢測額度已用完,下個月再來喔", record: await mfLatestHealth(uid), remaining: 0 }, 409);
+      }
       const image = String(body.image || "");
       if (!/^data:image\/(jpeg|png|webp);base64,/.test(image) || image.length > 3_000_000) {
         return mfJson({ error: "照片格式不正確或檔案太大" }, 400);
@@ -114,8 +133,8 @@ async function mfHandle(action: string, body: Record<string, unknown>, user: { u
       const { data, error } = await mfDb.from("mf_health_checks").insert({
         line_user_id: uid, month, total: Math.round(total), summary, scores: { scores, notes, tips, summary, diet, supplements, exercise },
       }).select().single();
-      if (error) return mfJson({ error: "本月已完成檢測" }, 409);
-      return mfJson({ record: data });
+      if (error) return mfJson({ error: "儲存失敗,請稍後再試" }, 500);
+      return mfJson({ record: data, remaining: await mfHealthRemaining(uid) });
     }
     case "quiz_submit": {
       const answers = Array.isArray(body.answers) ? body.answers.slice(0, 20).map((n) => Number(n) || 0) : [];
