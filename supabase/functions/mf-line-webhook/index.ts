@@ -9,7 +9,7 @@ const MF_OPENAI_MODEL = "gpt-4o-mini";
 const MF_SITE = "https://mia-ai131419.github.io/moneyfree";
 const MF_LIFF_HALF = "2011977982-TKjnvFHN";
 const MF_LIFF_FULL = "2011977982-Oqw2Ao0M";
-const MF_CONTACT = "https://line.me/ti/p/KSNRRjbtdx";
+const MF_CONTACT = "https://line.me/ti/p/KSNRRjbTdX";
 const MF_MENU_NAME = "moneyfree-main";
 const mfSecret = Deno.env.get("LINE_secret") || "";
 

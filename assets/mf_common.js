@@ -3,7 +3,7 @@ const MF_CONFIG = {
   apiUrl: 'https://rztsilpmkygnybahiajy.supabase.co/functions/v1/mf-api',
   liffHalf: '2011977982-TKjnvFHN',
   liffFull: '2011977982-Oqw2Ao0M',
-  contactUrl: 'https://line.me/ti/p/KSNRRjbtdx',
+  contactUrl: 'https://line.me/ti/p/KSNRRjbTdX',
 };
 
 // ?mf_preview=1:不登入 LINE、不寫入資料庫,只供瀏覽器預覽版面

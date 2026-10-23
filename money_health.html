@@ -48,6 +48,17 @@
     <div class="mf-card"><h2>給你的建議</h2><ul id="mf_tips"></ul>
       <div class="mf-disclaimer">本測驗為財務健康自我檢視,不構成投資建議。想進一步規劃,歡迎點選「聯絡專員」。</div>
     </div>
+    <div class="mf-card"><h2>72 法則:資產多久翻倍?</h2>
+      <div class="mf-rule72">
+        <div class="mf-rule72-row"><span>年化報酬率</span><b id="mf_rate_val">6%</b></div>
+        <input type="range" id="mf_rate" min="1" max="20" step="1" value="6" aria-label="年化報酬率">
+        <div class="mf-rule72-scale"><span>1%</span><span>20%</span></div>
+        <div class="mf-rule72-result">約 <b id="mf_double_years">12</b> 年資產翻倍</div>
+        <div class="mf-rule72-bar"><i id="mf_double_bar"></i></div>
+        <p class="mf-note" id="mf_rule72_formula">72 ÷ 6 = 12 年</p>
+      </div>
+      <p class="mf-plan-copy">透過優質的理財商品,可以幫自己用更短的時間翻倍資產</p>
+    </div>
     <div class="mf-card"><h2>財務規劃後的你</h2>
       <canvas id="mf_plan_chart" height="280"></canvas>
       <div class="mf-legend"><span><i class="mf-dot mf-dot-now"></i>目前</span><span><i class="mf-dot mf-dot-plan"></i>規劃後</span></div>
@@ -151,6 +162,18 @@ const mfStartQuiz = () => {
 };
 document.getElementById('mf_go').onclick = mfStartQuiz;
 document.getElementById('mf_retry').onclick = mfStartQuiz;
+// 72 法則:翻倍年數 ≈ 72 ÷ 年化報酬率(%)
+function mfUpdateRule72() {
+  const rate = Number(document.getElementById('mf_rate').value);
+  const years = 72 / rate;
+  const shown = Number.isInteger(years) ? String(years) : years.toFixed(1);
+  document.getElementById('mf_rate_val').textContent = `${rate}%`;
+  document.getElementById('mf_double_years').textContent = shown;
+  document.getElementById('mf_rule72_formula').textContent = `72 ÷ ${rate} = ${shown} 年`;
+  document.getElementById('mf_double_bar').style.width = `${(years / 72) * 100}%`;
+}
+document.getElementById('mf_rate').oninput = mfUpdateRule72;
+mfUpdateRule72();
 document.getElementById('mf_contact_btn').onclick = () => {
   if (!mfPreview && typeof liff !== 'undefined' && liff.isInClient()) liff.openWindow({ url: MF_CONFIG.contactUrl, external: false });
   else location.href = MF_CONFIG.contactUrl;

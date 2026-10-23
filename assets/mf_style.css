@@ -109,3 +109,12 @@ label.mf-field { display: block; margin: 12px 0 0; font-size: 14px; font-weight:
 .mf-bar-plan > i { position: absolute; left: 0; top: 0; background: #8fa9e3; }
 .mf-bar-plan > i.mf-bar-now { background: linear-gradient(90deg, #dcbc4a, var(--mf-gold-dark)); }
 .mf-plan-copy { text-align: center; font-weight: 700; color: var(--mf-blue); margin: 16px 0 10px; }
+.mf-rule72-row { display: flex; justify-content: space-between; align-items: baseline; font-size: 14px; }
+.mf-rule72-row b { font-size: 26px; color: var(--mf-gold-dark); }
+.mf-rule72 input[type=range] { width: 100%; margin: 10px 0 2px; accent-color: var(--mf-gold); height: 28px; }
+.mf-rule72-scale { display: flex; justify-content: space-between; font-size: 12px; color: var(--mf-muted); }
+.mf-rule72-result { text-align: center; font-size: 16px; margin: 14px 0 6px; }
+.mf-rule72-result b { font-size: 38px; color: var(--mf-blue); margin: 0 4px; }
+.mf-rule72-bar { height: 10px; background: var(--mf-blue-soft); border-radius: 99px; overflow: hidden; }
+.mf-rule72-bar > i { display: block; height: 100%; background: linear-gradient(90deg, #dcbc4a, var(--mf-gold-dark)); transition: width .2s; }
+#mf_rule72_formula { text-align: center; margin: 6px 0 0; }
