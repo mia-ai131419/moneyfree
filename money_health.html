@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>財務健康度檢測</title>
-<link rel="stylesheet" href="assets/mf_style.css?v=20261023c">
+<link rel="stylesheet" href="assets/mf_style.css?v=20261023d">
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="assets/mf_common.js?v=20261023c"></script>
-<script src="assets/mf_quiz_data.js?v=20261023c"></script>
+<script src="assets/mf_common.js?v=20261023d"></script>
+<script src="assets/mf_quiz_data.js?v=20261023d"></script>
 </head>
 <body>
 <div class="mf-wrap">
@@ -173,7 +173,15 @@ function mfUpdateRule72() {
 }
 document.getElementById('mf_rate').oninput = mfUpdateRule72;
 mfUpdateRule72();
-document.getElementById('mf_contact_btn').onclick = () => {
+// 聯絡專員:先把財務報告卡片推給專員(最多等 3 秒),再開啟專員 LINE
+document.getElementById('mf_contact_btn').onclick = async () => {
+  const btn = document.getElementById('mf_contact_btn');
+  btn.disabled = true; btn.textContent = '正在通知專員…';
+  try {
+    await Promise.race([mfApi('contact_request'), new Promise((r) => setTimeout(r, 3000))]);
+    mfToast('已將你的財務報告傳給專員');
+  } catch (err) { /* 通知失敗仍讓使用者聯絡專員 */ }
+  btn.disabled = false; btn.textContent = '聯絡專員';
   if (!mfPreview && typeof liff !== 'undefined' && liff.isInClient()) liff.openWindow({ url: MF_CONFIG.contactUrl, external: false });
   else location.href = MF_CONFIG.contactUrl;
 };

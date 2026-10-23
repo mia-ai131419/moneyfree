@@ -1,17 +1,15 @@
 // moneyfree 擁有者專用指令:圖文、圖片修改、群發、設計模板
 import { mfDb, mfLine, mfReply, mfReplyOrPush, mfShowLoading, mfText } from "./mf_line.ts";
-import { mfGenerateAndSend, mfLogImage, mfStamp, mfStoreForLine } from "./mf_image_gen.ts";
+import { mfGenerateAndSend, mfStamp, mfStoreForLine } from "./mf_image_gen.ts";
 import { MF_MAX_IMAGES, mfBroadcastConfirm, mfBroadcastPreview, mfClearDraft, mfDraftImages } from "./mf_broadcast.ts";
-import { mfAskImageChoice, mfComposeImage, mfGetState } from "./mf_compose.ts";
+import { mfComposeImage, mfGetState } from "./mf_compose.ts";
 
 const MF_OPENAI_KEY = Deno.env.get("OPENAI_API_KEY") || "";
 const MF_LIFF_FULL = "2011977982-Oqw2Ao0M";
 export const MF_HELP_TEXT = `【擁有者指令】
 ・直接輸入問題:AI 金融助理
-・圖文 需求:選擇「群發」(產生圖文後預覽群發)或「修改圖文」(上傳 1–4 張照片整合成專業圖文)
-・直接貼網址:讀取網頁內容後同樣走圖文流程
-・圖片修改 需求:修改上一張產生的圖片
-・群發這張:把最近一張圖文放進群發預覽
+・圖文:開啟圖文工具卡片(製作群發圖片/修改圖片),也可輸入「圖文 需求」或直接貼網址
+・修改圖片:修改最近一張圖片
 ・傳照片:暫存要群發的照片(最多 4 張)
 ・群發 文字:預覽群發內容(要以「群發」開頭)
 ・確認群發 / 取消群發
@@ -69,29 +67,6 @@ export function mfOwnerCommand(ev: Record<string, any>, ownerId: string, text: s
   if (text === "指令" || text === "說明") return mfReply(token, MF_HELP_TEXT);
   if (text === "財務表格" || text === "財務健康度表格") {
     return mfReply(token, `【使用者財務健康度表格】(僅擁有者可開啟)\nhttps://liff.line.me/${MF_LIFF_FULL}/owner_report.html`);
-  }
-
-  const isUrlOnly = /^https?:\/\/\S+$/i.test(text); // 只貼網址也視為「圖文」
-  if (text.startsWith("圖文") || isUrlOnly) {
-    return mfAskImageChoice(token, ownerId, isUrlOnly ? text : text.slice(2).trim());
-  }
-
-  if (text.startsWith("圖片修改") || text.startsWith("修改圖片")) {
-    const request = text.slice(4).trim();
-    if (!request) return mfReply(token, "請在「圖片修改」後面寫要改什麼,例如:圖片修改 背景換成夜景、標題改成「理財講座」");
-    return (async () => {
-      const { data: last } = await mfDb.from("mf_image_logs").select("url").eq("owner_id", ownerId)
-        .order("created_at", { ascending: false }).limit(1).maybeSingle();
-      if (!last) { await mfReply(token, "還沒有可以修改的圖片,請先用「圖文 需求」產生一張。"); return; }
-      await mfShowLoading(ownerId);
-      const src = await fetch(last.url);
-      if (!src.ok) { await mfReplyOrPush(token, ownerId, [mfText("找不到上一張圖片,請重新產生。")]); return; }
-      const prompt = `Edit this image according to the request below. Keep the overall layout, style and anything not mentioned unchanged. ` +
-        `Any Chinese text must be correct, clear Traditional Chinese; do not add extra small text.\nRequest: ${request}`;
-      const caption = "圖片修改完成 ✅\n可以繼續輸入「圖片修改 需求」再調整,或輸入「群發這張」\n長按可儲存或轉傳";
-      const img = await mfGenerateAndSend(token, ownerId, prompt, "gen", caption, [new Uint8Array(await src.arrayBuffer())]);
-      if (img) await mfLogImage(ownerId, img, `修改:${request}`);
-    })();
   }
 
   if (text.startsWith("設計")) {

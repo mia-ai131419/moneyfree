@@ -38,6 +38,45 @@ function mfMonth() {
 }
 
 const MF_HEALTH_MONTHLY_QUOTA = 1;
+const MF_DIM_LABELS: Record<string, string> = { flex: "財務彈性度", stress: "可承受壓力度", ret: "投資回報程度", health: "資產健康程度", growth: "資產成長度" };
+const MF_PLAN_RATE: Record<string, number> = { growth: 2, health: 1.5, flex: 1.3, stress: 1.3, ret: 2 };
+const MF_CONTACT_COOLDOWN_MS = 10 * 60 * 1000;
+
+// 推給擁有者(專員)的財務報告卡片
+function mfContactCard(name: string, at: string, persona: string, dims: Record<string, number>) {
+  const total = Math.round(MF_DIM_KEYS.reduce((s, k) => s + (Number(dims[k]) || 0), 0) / MF_DIM_KEYS.length);
+  const time = new Date(at).toLocaleString("zh-TW", { timeZone: "Asia/Taipei", hour12: false });
+  const row = (k: string) => {
+    const now = Number(dims[k]) || 0;
+    const plan = Math.min(100, Math.round(now * MF_PLAN_RATE[k]));
+    return { type: "box", layout: "horizontal", contents: [
+      { type: "text", text: MF_DIM_LABELS[k], size: "sm", color: "#5B6573", flex: 5 },
+      { type: "text", text: `${now} → ${plan}`, size: "sm", weight: "bold", color: "#22324D", align: "end", flex: 4 },
+    ] };
+  };
+  return {
+    type: "flex", altText: `【幫我資產翻倍】${name} 想諮詢財務規劃(總分 ${total})`,
+    contents: {
+      type: "bubble",
+      header: { type: "box", layout: "vertical", backgroundColor: "#C9A227", paddingAll: "16px", contents: [
+        { type: "text", text: "幫我資產翻倍", weight: "bold", size: "xxl", color: "#22324D", align: "center" },
+        { type: "text", text: "使用者按下「聯絡專員」", size: "xs", color: "#22324D", align: "center", margin: "sm" },
+      ] },
+      body: { type: "box", layout: "vertical", spacing: "sm", paddingAll: "16px", contents: [
+        { type: "text", text: name, weight: "bold", size: "lg", color: "#22324D", wrap: true },
+        { type: "text", text: `測驗時間:${time}`, size: "xs", color: "#5B6573" },
+        { type: "box", layout: "horizontal", margin: "md", contents: [
+          { type: "text", text: "財務健康總分", size: "sm", color: "#5B6573", gravity: "bottom" },
+          { type: "text", text: String(total), size: "3xl", weight: "bold", color: "#9C7C14", align: "end" },
+        ] },
+        { type: "text", text: `理財性格:${persona || "-"}`, size: "sm", color: "#22324D" },
+        { type: "separator", margin: "md" },
+        { type: "text", text: "五力分數(目前 → 規劃後)", size: "xs", color: "#5B6573", margin: "md" },
+        ...MF_DIM_KEYS.map(row),
+      ] },
+    },
+  };
+}
 
 // 剩餘額度 = 每月額度 − 本期次數;本期起點 = 本月 1 日與「額度重置時間」(mf_settings)取較晚者
 async function mfHealthRemaining(uid: string) {
@@ -165,6 +204,27 @@ async function mfHandle(action: string, body: Record<string, unknown>, user: { u
       const { error } = await mfDb.from("mf_personal_info").upsert({ line_user_id: uid, data, updated_at: new Date().toISOString() });
       if (error) return mfJson({ error: "儲存失敗" }, 500);
       return mfJson({ ok: true });
+    }
+    case "contact_request": {
+      // 使用者按「聯絡專員」:把最新財務報告推給擁有者(10 分鐘內只推一次)
+      const { data: recent } = await mfDb.from("mf_contact_logs").select("created_at").eq("line_user_id", uid).eq("pushed", true)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (recent && Date.now() - new Date(recent.created_at).getTime() < MF_CONTACT_COOLDOWN_MS) return mfJson({ ok: true, skipped: true });
+      const [{ data: quiz }, { data: owner }, { data: me }] = await Promise.all([
+        mfDb.from("mf_money_quiz").select("dims,persona,created_at").eq("line_user_id", uid).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+        mfDb.from("mf_users").select("line_user_id").eq("is_owner", true).maybeSingle(),
+        mfDb.from("mf_users").select("display_name").eq("line_user_id", uid).maybeSingle(),
+      ]);
+      if (!quiz || !owner) return mfJson({ ok: false, error: "尚無測驗紀錄或未設定專員" }, 404);
+      const card = mfContactCard(me?.display_name || user.name || "使用者", quiz.created_at, quiz.persona || "", quiz.dims as Record<string, number>);
+      const r = await fetch("https://api.line.me/v2/bot/message/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${Deno.env.get("LINE_TOKEN")}` },
+        body: JSON.stringify({ to: owner.line_user_id, messages: [card] }),
+      });
+      if (!r.ok) console.error("contact push failed", r.status, await r.text());
+      await mfDb.from("mf_contact_logs").insert({ line_user_id: uid, payload: { dims: quiz.dims, persona: quiz.persona }, pushed: r.ok });
+      return mfJson({ ok: r.ok });
     }
     case "owner_quiz_report": {
       // 擁有者專用:所有使用者最新一次財務測驗分數與分佈
