@@ -101,3 +101,11 @@ label.mf-field { display: block; margin: 12px 0 0; font-size: 14px; font-weight:
 .mf-sub-h { font-size: 15px; margin: 14px 0 4px; color: var(--mf-gold-dark); }
 .mf-card ul { padding-left: 20px; margin: 4px 0; }
 .mf-card li { margin: 4px 0; }
+.mf-legend { display: flex; justify-content: center; gap: 18px; font-size: 13px; margin: 6px 0 4px; }
+.mf-dot { display: inline-block; width: 12px; height: 12px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
+.mf-dot-now { background: rgba(201,162,39,.7); border: 1px solid #c9a227; }
+.mf-dot-plan { background: rgba(204,221,255,.9); border: 1px solid #6f8fd6; }
+.mf-bar-plan { position: relative; }
+.mf-bar-plan > i { position: absolute; left: 0; top: 0; background: #8fa9e3; }
+.mf-bar-plan > i.mf-bar-now { background: linear-gradient(90deg, #dcbc4a, var(--mf-gold-dark)); }
+.mf-plan-copy { text-align: center; font-weight: 700; color: var(--mf-blue); margin: 16px 0 10px; }

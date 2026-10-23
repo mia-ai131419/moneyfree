@@ -1,6 +1,7 @@
 // moneyfree LINE Webhook:驗證簽章、綁定擁有者、建立圖文選單、只對擁有者提供 AI 助理與管理工具
 import { mfDb, mfLine, mfReply } from "./mf_line.ts";
 import { MF_HELP_TEXT, mfOwnerCommand, mfOwnerImage } from "./mf_owner_tools.ts";
+import { mfComposeText } from "./mf_compose.ts";
 
 declare const EdgeRuntime: { waitUntil(p: Promise<unknown>): void };
 
@@ -145,6 +146,7 @@ async function mfHandleEvent(ev: Record<string, any>) {
     catch (e) { await mfReply(ev.replyToken, `更新失敗:${(e as Error).message}`); }
     return;
   }
+  if (await mfComposeText(ev.replyToken, userId, text)) return; // 圖文流程按鈕優先(例:「群發這張」)
   const ownerTask = mfOwnerCommand(ev, userId, text);
   if (ownerTask) { await ownerTask; return; }
 

@@ -48,12 +48,23 @@
     <div class="mf-card"><h2>給你的建議</h2><ul id="mf_tips"></ul>
       <div class="mf-disclaimer">本測驗為財務健康自我檢視,不構成投資建議。想進一步規劃,歡迎點選「聯絡專員」。</div>
     </div>
-    <button class="mf-btn" style="margin-top:14px" id="mf_retry">重新測驗</button>
+    <div class="mf-card"><h2>財務規劃後的你</h2>
+      <canvas id="mf_plan_chart" height="280"></canvas>
+      <div class="mf-legend"><span><i class="mf-dot mf-dot-now"></i>目前</span><span><i class="mf-dot mf-dot-plan"></i>規劃後</span></div>
+      <div id="mf_planbars"></div>
+      <p class="mf-plan-copy">經過財務規劃之後,有機會讓自己的財務變成這個樣子</p>
+      <button class="mf-btn" id="mf_contact_btn">聯絡專員</button>
+      <p class="mf-note" style="text-align:center;margin:8px 0 0">規劃後數值為示意,實際成效依個人狀況而定</p>
+    </div>
+    <button class="mf-btn mf-ghost" style="margin-top:14px" id="mf_retry">重新測驗</button>
     <button class="mf-btn mf-ghost" onclick="mfClose()">關閉</button>
   </div>
 </div>
 <script>
-let mfAnswers = []; let mfIdx = 0; let mfChart = null; let mfLast = null;
+let mfAnswers = []; let mfIdx = 0; let mfChart = null; let mfPlanChart = null; let mfLast = null;
+// 財務規劃後的示意倍數(上限 100 分)
+const MF_PLAN_RATE = { growth: 2, health: 1.5, flex: 1.3, stress: 1.3, ret: 2 };
+const mfPlanned = (dims) => Object.fromEntries(MF_DIMS.map(([k]) => [k, Math.min(100, Math.round(dims[k] * MF_PLAN_RATE[k]))]));
 
 function mfRenderQ() {
   const qq = MF_QUESTIONS[mfIdx];
@@ -79,7 +90,29 @@ function mfRenderResult(mfDims) {
      <div class="mf-bar"><i style="width:${dims[k]}%"></i></div></div>`).join('');
   document.getElementById('mf_tips').innerHTML = weak.map((k) => `<li>${MF_DIM_TIPS[k]}</li>`).join('');
   mfShow('mf_quiz', false); mfShow('mf_start', false); mfShow('mf_loading', false); mfShow('mf_result');
-  if (typeof Chart === 'undefined') { document.getElementById('mf_chart').style.display = 'none'; return; }
+  const plan = mfPlanned(dims);
+  document.getElementById('mf_planbars').innerHTML = MF_DIMS.map(([k, label]) =>
+    `<div class="mf-bar-row"><div class="mf-bar-head"><span>${label}</span><b>${dims[k]} → ${plan[k]}</b></div>
+     <div class="mf-bar mf-bar-plan"><i style="width:${plan[k]}%"></i><i class="mf-bar-now" style="width:${dims[k]}%"></i></div></div>`).join('');
+  if (typeof Chart === 'undefined') {
+    document.getElementById('mf_chart').style.display = 'none';
+    document.getElementById('mf_plan_chart').style.display = 'none';
+    return;
+  }
+  if (mfPlanChart) mfPlanChart.destroy();
+  mfPlanChart = new Chart(document.getElementById('mf_plan_chart'), {
+    type: 'radar',
+    data: { labels: MF_DIMS.map((d) => d[1]), datasets: [
+      { label: '規劃後', data: MF_DIMS.map(([k]) => plan[k]), fill: true,
+        backgroundColor: 'rgba(204,221,255,.55)', borderColor: '#6f8fd6', pointBackgroundColor: '#6f8fd6' },
+      { label: '目前', data: MF_DIMS.map(([k]) => dims[k]), fill: true,
+        backgroundColor: 'rgba(201,162,39,.35)', borderColor: '#c9a227', pointBackgroundColor: '#22324d' },
+    ] },
+    options: { plugins: { legend: { display: false } },
+      scales: { r: { min: 0, max: 100, ticks: { stepSize: 25, display: false },
+        grid: { color: '#ccddff' }, angleLines: { color: '#ccddff' },
+        pointLabels: { color: '#22324d', font: { size: 13, weight: 'bold' } } } } },
+  });
   if (mfChart) mfChart.destroy();
   mfChart = new Chart(document.getElementById('mf_chart'), {
     type: 'radar',
@@ -118,6 +151,10 @@ const mfStartQuiz = () => {
 };
 document.getElementById('mf_go').onclick = mfStartQuiz;
 document.getElementById('mf_retry').onclick = mfStartQuiz;
+document.getElementById('mf_contact_btn').onclick = () => {
+  if (!mfPreview && typeof liff !== 'undefined' && liff.isInClient()) liff.openWindow({ url: MF_CONFIG.contactUrl, external: false });
+  else location.href = MF_CONFIG.contactUrl;
+};
 document.getElementById('mf_last').onclick = () => mfRenderResult(mfLast);
 
 (async () => {
