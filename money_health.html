@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>財務健康度檢測</title>
-<link rel="stylesheet" href="assets/mf_style.css?v=20261023d">
+<link rel="stylesheet" href="assets/mf_style.css?v=20261023e">
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="assets/mf_common.js?v=20261023d"></script>
-<script src="assets/mf_quiz_data.js?v=20261023d"></script>
+<script src="assets/mf_common.js?v=20261023e"></script>
+<script src="assets/mf_quiz_data.js?v=20261023e"></script>
 </head>
 <body>
 <div class="mf-wrap">
@@ -25,6 +25,7 @@
     <p class="mf-note">憑直覺選最接近你的答案,測出你的財務彈性、抗壓力、投資回報、資產健康與成長度。</p>
     <button class="mf-btn" id="mf_go">開始測驗</button>
     <button class="mf-btn mf-ghost mf-hidden" id="mf_last">查看上次結果</button>
+    <p class="mf-note" id="mf_quota_note"></p>
     <div id="mf_err" class="mf-error"></div>
   </div>
 
@@ -140,8 +141,14 @@ function mfRenderResult(mfDims) {
 async function mfFinish() {
   const r = mfScoreQuiz(mfAnswers);
   mfShow('mf_quiz', false); mfShow('mf_loading');
-  try { await mfApi('quiz_submit', { answers: mfAnswers, dims: r.mfDims, persona: r.mfPersona.name }); }
-  catch (err) { mfToast('結果儲存失敗,但仍可查看'); }
+  try {
+    const res = await mfApi('quiz_submit', { answers: mfAnswers, dims: r.mfDims, persona: r.mfPersona.name });
+    if (typeof res.remaining === 'number') mfSetQuota(res.remaining);
+  } catch (err) {
+    if (err.mfData?.quota) { mfSetQuota(0); mfShow('mf_loading', false); mfShow('mf_start'); return; }
+    mfToast('結果儲存失敗,但仍可查看');
+  }
+  mfLast = r.mfDims; mfShow('mf_last');
   mfRenderResult(r.mfDims);
 }
 
@@ -155,7 +162,19 @@ document.getElementById('mf_opts').onclick = (e) => {
   }, 180);
 };
 document.getElementById('mf_back').onclick = () => { if (mfIdx) { mfIdx -= 1; mfRenderQ(); } };
+// 每月額度(預設 3 次);用完就不能再測
+let mfQuizLeft = null;
+function mfSetQuota(left) {
+  mfQuizLeft = left;
+  const none = left <= 0;
+  document.getElementById('mf_go').disabled = none;
+  mfShow('mf_retry', !none);
+  document.getElementById('mf_quota_note').textContent = none
+    ? '本月 3 次檢測額度已用完,下個月再來測吧'
+    : `本月還可以測 ${left} 次(每月 3 次)`;
+}
 const mfStartQuiz = () => {
+  if (mfQuizLeft !== null && mfQuizLeft <= 0) { mfSetQuota(0); mfShow('mf_result', false); mfShow('mf_start'); return; }
   mfAnswers = []; mfIdx = 0; mfRenderQ();
   mfShow('mf_start', false); mfShow('mf_result', false); mfShow('mf_quiz'); window.scrollTo(0, 0);
 };
@@ -192,6 +211,7 @@ document.getElementById('mf_last').onclick = () => mfRenderResult(mfLast);
     await mfInit(MF_CONFIG.liffHalf);
     const r = await mfApi('quiz_latest');
     if (r.record) { mfLast = r.record.dims; mfShow('mf_last'); }
+    if (typeof r.remaining === 'number') mfSetQuota(r.remaining);
   } catch (err) { document.getElementById('mf_err').textContent = err.message; }
   mfShow('mf_loading', false); mfShow('mf_start');
 })();

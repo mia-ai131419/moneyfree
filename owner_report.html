@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>使用者財務健康度表格</title>
-<link rel="stylesheet" href="assets/mf_style.css?v=20261023d">
+<link rel="stylesheet" href="assets/mf_style.css?v=20261023e">
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-<script src="assets/mf_common.js?v=20261023d"></script>
-<script src="assets/mf_quiz_data.js?v=20261023d"></script>
+<script src="assets/mf_common.js?v=20261023e"></script>
+<script src="assets/mf_quiz_data.js?v=20261023e"></script>
 <style>
   .mf-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
   .mf-stat { background: var(--mf-blue-soft); border-radius: 12px; padding: 12px; text-align: center; }
@@ -34,6 +34,13 @@
   </div>
   <div id="mf_loading" class="mf-loading"><div class="mf-spinner"></div>載入中…</div>
   <div id="mf_err" class="mf-card mf-error mf-hidden"></div>
+
+  <div id="mf_week" class="mf-hidden">
+    <div class="mf-card"><h2>過去一週檢測</h2><p class="mf-note" id="mf_week_range"></p>
+      <h3 class="mf-sub-h">健康大數據檢測</h3><div class="mf-table-wrap"><table class="mf-table" id="mf_week_health" style="min-width:0"></table></div>
+      <h3 class="mf-sub-h">財務健康度檢測</h3><div class="mf-table-wrap"><table class="mf-table" id="mf_week_quiz" style="min-width:0"></table></div>
+    </div>
+  </div>
 
   <div id="mf_report" class="mf-hidden">
     <div class="mf-card">
@@ -92,6 +99,21 @@ function mfRender(rows) {
   mfShow('mf_loading', false); mfShow('mf_report');
 }
 
+// 每週報表卡片的「看完整表格」會帶 ?week=1
+function mfDayTw(iso) { return new Date(iso).toLocaleDateString('zh-TW', { timeZone: 'Asia/Taipei', month: '2-digit', day: '2-digit' }); }
+function mfWeekTable(id, rows, resultLabel) {
+  const body = rows.length
+    ? rows.map((r) => `<tr><td>${mfEsc(r.name)}</td><td class="mf-total">${r.total}</td><td style="white-space:normal;text-align:left">${mfEsc(r.result || '-')}</td><td>${mfDayTw(r.at)}</td></tr>`).join('')
+    : '<tr><td colspan="4" style="text-align:center">本週無新檢測</td></tr>';
+  document.getElementById(id).innerHTML = `<thead><tr><th>使用者</th><th>分數</th><th>${resultLabel}</th><th>日期</th></tr></thead><tbody>${body}</tbody>`;
+}
+function mfRenderWeek(d) {
+  document.getElementById('mf_week_range').textContent = `${mfDayTw(d.from)} ~ ${mfDayTw(new Date(new Date(d.to) - 1).toISOString())}(健康 ${d.health.length} 人次、財務 ${d.quiz.length} 人次)`;
+  mfWeekTable('mf_week_health', d.health, '總評');
+  mfWeekTable('mf_week_quiz', d.quiz, '理財性格');
+  mfShow('mf_week');
+}
+
 document.getElementById('mf_thead').onclick = (e) => {
   const k = e.target.closest('th')?.dataset.k;
   if (!k) return;
@@ -102,7 +124,14 @@ document.getElementById('mf_thead').onclick = (e) => {
 (async () => {
   try {
     await mfInit(MF_CONFIG.liffFull);
+    const mfWeekMode = new URLSearchParams(location.search).get('week') === '1';
     const r = await mfApi('owner_quiz_report');
+    if (mfWeekMode) {
+      const w = await mfApi('owner_weekly');
+      mfRenderWeek(w.mfPreview ? { from: new Date(Date.now() - 7 * 864e5).toISOString(), to: new Date().toISOString(),
+        health: [{ name: '預覽 A', total: 78, result: '氣色不錯,注意睡眠', at: new Date().toISOString() }],
+        quiz: [{ name: '預覽 B', total: 62, result: '潛力探索者', at: new Date().toISOString() }] } : w);
+    }
     if (r.mfPreview) {
       mfRender([
         { name: '預覽 A', total: 82, persona: '財務領航者', dims: { flex: 85, stress: 80, ret: 78, health: 84, growth: 83 }, at: new Date().toISOString(), times: 2 },

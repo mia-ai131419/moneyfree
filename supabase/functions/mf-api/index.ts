@@ -1,5 +1,6 @@
 // moneyfree LIFF 後端 API:驗證 LINE ID Token 後處理健康檢測、財務測驗、個人資訊
 import { createClient } from "npm:@supabase/supabase-js@2.45.4";
+import { mfWeeklyData, mfWeeklyPush } from "./mf_weekly.ts";
 
 const MF_LIFF_CHANNEL_ID = "2011977982";
 const MF_OPENAI_MODEL = "gpt-4o-mini";
@@ -7,7 +8,7 @@ const mfDb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_
 
 const MF_CORS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "content-type",
+  "Access-Control-Allow-Headers": "content-type, x-mf-cron-key",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
@@ -87,6 +88,15 @@ async function mfHealthRemaining(uid: string) {
   const { count } = await mfDb.from("mf_health_checks").select("id", { count: "exact", head: true })
     .eq("line_user_id", uid).gte("created_at", since.toISOString());
   return Math.max(0, MF_HEALTH_MONTHLY_QUOTA - (count || 0));
+}
+
+// 財務健康度檢測:每人每月(台灣時間)最多 3 次
+const MF_QUIZ_MONTHLY_QUOTA = 3;
+async function mfQuizRemaining(uid: string) {
+  const monthStart = new Date(`${mfMonth()}-01T00:00:00+08:00`);
+  const { count } = await mfDb.from("mf_money_quiz").select("id", { count: "exact", head: true })
+    .eq("line_user_id", uid).gte("created_at", monthStart.toISOString());
+  return Math.max(0, MF_QUIZ_MONTHLY_QUOTA - (count || 0));
 }
 
 async function mfLatestHealth(uid: string) {
@@ -181,14 +191,16 @@ async function mfHandle(action: string, body: Record<string, unknown>, user: { u
       const dims: Record<string, number> = {};
       for (const k of MF_DIM_KEYS) dims[k] = Math.max(0, Math.min(100, Math.round(Number(rawDims[k]) || 0)));
       const persona = String(body.persona || "").slice(0, 20);
+      const left = await mfQuizRemaining(uid);
+      if (left <= 0) return mfJson({ error: `本月 ${MF_QUIZ_MONTHLY_QUOTA} 次檢測額度已用完,下個月再來測吧`, quota: true }, 429);
       const { error } = await mfDb.from("mf_money_quiz").insert({ line_user_id: uid, answers, dims, persona });
       if (error) return mfJson({ error: "儲存失敗" }, 500);
-      return mfJson({ ok: true });
+      return mfJson({ ok: true, remaining: left - 1 });
     }
     case "quiz_latest": {
       const { data } = await mfDb.from("mf_money_quiz").select("*").eq("line_user_id", uid)
         .order("created_at", { ascending: false }).limit(1).maybeSingle();
-      return mfJson({ record: data });
+      return mfJson({ record: data, remaining: await mfQuizRemaining(uid), quota: MF_QUIZ_MONTHLY_QUOTA });
     }
     case "personal_get": {
       const { data } = await mfDb.from("mf_personal_info").select("*").eq("line_user_id", uid).maybeSingle();
@@ -245,6 +257,12 @@ async function mfHandle(action: string, body: Record<string, unknown>, user: { u
       }
       return mfJson({ rows: [...latest.values()].sort((x, y) => y.total - x.total) });
     }
+    case "owner_weekly": {
+      // 擁有者專用:上週健康/財務檢測明細
+      const { data: me } = await mfDb.from("mf_users").select("is_owner").eq("line_user_id", uid).maybeSingle();
+      if (!me?.is_owner) return mfJson({ error: "只有帳號擁有者可以查看" }, 403);
+      return mfJson(await mfWeeklyData(mfDb));
+    }
     default:
       return mfJson({ error: "未知的操作" }, 400);
   }
@@ -254,6 +272,8 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: MF_CORS });
   if (req.method !== "POST") return mfJson({ error: "Method not allowed" }, 405);
   try {
+    const cronKey = req.headers.get("x-mf-cron-key");
+    if (cronKey) { const r = await mfWeeklyPush(mfDb, cronKey); return mfJson(r.body, r.status); } // 每週排程
     const body = await req.json();
     const user = await mfVerify(String(body.idToken || ""));
     if (!user) return mfJson({ error: "登入已失效,請關閉後重新開啟" }, 401);

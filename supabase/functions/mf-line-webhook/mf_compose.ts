@@ -15,7 +15,7 @@ const B = {
   confirm: "確認群發", editThis: "修改這張", regen: "重新產生", cancel: "取消", finish: "結束", last: "群發這張",
 };
 // 等待使用者輸入內容時,這些開頭仍視為指令而不是內容
-const MF_COMMAND_PREFIXES = ["指令", "說明", "群發", "確認群發", "取消群發", "財務表格", "設計", "更新選單", "圖文"];
+const MF_COMMAND_PREFIXES = ["指令", "說明", "群發", "確認群發", "取消群發", "財務表格", "設計", "更新選單", "圖文", "圖片"];
 const CANCEL: MfButton = ["取消", B.cancel, false];
 
 type MfState = { mode: string; request: string | null };
@@ -141,9 +141,10 @@ export async function mfComposeImage(ev: Record<string, any>, ownerId: string, r
 // 擁有者文字訊息若屬於圖文流程就處理並回傳 true
 export async function mfComposeText(token: string, ownerId: string, text: string): Promise<boolean> {
   const isUrlOnly = /^https?:\/\/\S+$/i.test(text);
-  if (text.startsWith("圖文") || isUrlOnly) { await mfImageMenu(token, ownerId, (isUrlOnly ? text : text.slice(2).trim()) || null); return true; }
-  if (text === B.edit) { await mfAskEdit(token, ownerId); return true; }
+  if (text === B.edit || text === "圖片修改") { await mfAskEdit(token, ownerId); return true; }
   if (/^(圖片修改|修改圖片)\s*\S/.test(text)) { await mfEditLast(token, ownerId, text.slice(4).trim()); return true; }
+  // 「圖文」「圖片」都開啟圖文工具卡片
+  if (/^(圖文|圖片)/.test(text) || isUrlOnly) { await mfImageMenu(token, ownerId, (isUrlOnly ? text : text.slice(2).trim()) || null); return true; }
   if (text === B.last) {
     const { data: last } = await mfDb.from("mf_image_logs").select("url,preview_url").eq("owner_id", ownerId)
       .order("created_at", { ascending: false }).limit(1).maybeSingle();
