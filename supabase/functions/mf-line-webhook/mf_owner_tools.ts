@@ -2,16 +2,19 @@
 import {
   mfDb, mfImage, mfLine, MfMessage, mfReply, mfReplyMessages, mfReplyOrPush, mfShowLoading, mfText, mfUploadImage,
 } from "./mf_line.ts";
+import { mfPlanImage } from "./mf_image_prompt.ts";
 
 const MF_OPENAI_KEY = Deno.env.get("OPENAI_API_KEY") || "";
 const MF_MAX_BROADCAST_IMAGES = 4;
+const MF_IMAGE_MODEL = Deno.env.get("MF_IMAGE_MODEL") || "gpt-image-1"; // 可在 Supabase Secrets 切換新模型
 export const MF_HELP_TEXT = `【擁有者指令】
 ・直接輸入問題:AI 金融助理
 ・圖文 需求:AI 生成正方形圖片
+・直接貼網址(或 圖文 網址 需求):讀取網頁內容後生成圖片
 ・傳照片:暫存要群發的照片(最多 4 張)
-・群發 文字:預覽群發內容
+・群發 文字:預覽群發內容(要以「群發」開頭)
 ・確認群發 / 取消群發
-・設計模板 需求(可省略):AI 產生介面配色模板
+・設計 需求(可省略):AI 產生介面配色模板
 ・更新選單:重新上傳圖文選單`;
 
 function mfStamp() {
@@ -37,12 +40,12 @@ async function mfOpenAIImage(prompt: string) {
     body: JSON.stringify(body),
   });
   let r = await call({
-    model: "gpt-image-1", prompt, size: "1024x1024", quality: "medium", output_format: "jpeg", output_compression: 85,
+    model: MF_IMAGE_MODEL, prompt, size: "1024x1024", quality: "high", output_format: "jpeg", output_compression: 85,
   });
   let contentType = "image/jpeg";
   if (!r.ok && [400, 403, 404].includes(r.status)) {
     // 帳號未開通 gpt-image-1 時改用 dall-e-3
-    r = await call({ model: "dall-e-3", prompt, size: "1024x1024", quality: "standard", response_format: "b64_json" });
+    r = await call({ model: "dall-e-3", prompt, size: "1024x1024", quality: "hd", response_format: "b64_json" });
     contentType = "image/png";
   }
   const d = await r.json().catch(() => ({}));
@@ -129,19 +132,23 @@ export function mfOwnerCommand(ev: Record<string, any>, ownerId: string, text: s
   const token = ev.replyToken as string;
   if (text === "指令" || text === "說明") return mfReply(token, MF_HELP_TEXT);
 
-  if (text.startsWith("圖文")) {
-    const prompt = text.slice(2).trim();
-    if (!prompt) return mfReply(token, "請在「圖文」後面加上需求,例如:圖文 金色質感的理財講座海報");
+  const isUrlOnly = /^https?:\/\/\S+$/i.test(text); // 只貼網址也視為「圖文」
+  if (text.startsWith("圖文") || isUrlOnly) {
+    const request = isUrlOnly ? text : text.slice(2).trim();
+    if (!request) return mfReply(token, "請在「圖文」後面加上需求或網址,例如:\n圖文 金色質感的理財講座海報\n圖文 https://example.com 做成活動宣傳圖");
     return (async () => {
       await mfShowLoading(ownerId);
-      await mfGenerateAndSend(token, ownerId, prompt, "gen", "圖片完成 ✅ 長按可儲存或轉傳");
+      const plan = await mfPlanImage(request);
+      if (!plan.ok) { await mfReplyOrPush(token, ownerId, [mfText(`無法產生圖片:${plan.reason}`)]); return; }
+      const caption = `圖片完成 ✅${plan.title ? `\n標題:${plan.title}` : ""}${plan.source ? `\n來源:${plan.source}` : ""}\n長按可儲存或轉傳`;
+      await mfGenerateAndSend(token, ownerId, plan.prompt, "gen", caption);
     })();
   }
 
-  if (text.startsWith("設計模板")) {
+  if (text.startsWith("設計")) {
     return (async () => {
       await mfShowLoading(ownerId);
-      await mfDesignTemplate(token, ownerId, text.slice(4).trim());
+      await mfDesignTemplate(token, ownerId, text.replace(/^設計(模板)?/, "").trim());
     })();
   }
 

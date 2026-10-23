@@ -64,7 +64,10 @@ async function mfAnalyzeFace(image: string) {
 用繁體中文(台灣用語),語氣溫暖、清楚、簡短。每項 0–100 分,分數越高代表狀態越好。
 觀察項目:
 ${itemsText}
-只輸出 JSON:{"face_detected":true/false,"scores":{項目代號:整數},"notes":{項目代號:"15 字內觀察"},"summary":"60 字內總評","tips":["3 條生活建議,每條 30 字內"]}
+只輸出 JSON:{"face_detected":true/false,"scores":{項目代號:整數},"notes":{項目代號:"15 字內觀察"},"summary":"60 字內總評","tips":["3 條生活建議,每條 30 字內"],
+"diet":["3 條飲食建議,針對分數較低的項目,寫出具體食物,每條 40 字內"],
+"supplements":["2 條常見營養補充品建議(如維生素、魚油、益生菌等),說明對應改善方向,每條 40 字內,不可宣稱療效"],
+"exercise":["3 條運動建議,含運動種類、頻率與時間,每條 40 字內"]}
 若照片中沒有清楚的人臉,face_detected 設為 false,其他欄位可省略。`,
         },
         { role: "user", content: [{ type: "image_url", image_url: { url: image, detail: "low" } }] },
@@ -103,9 +106,13 @@ async function mfHandle(action: string, body: Record<string, unknown>, user: { u
         total += (v * w) / 100;
       }
       const summary = String(ai.summary || "").slice(0, 200);
-      const tips = (Array.isArray(ai.tips) ? ai.tips : []).slice(0, 3).map((t: unknown) => String(t).slice(0, 80));
+      const mfList = (v: unknown, n: number) => (Array.isArray(v) ? v : []).slice(0, n).map((t: unknown) => String(t).slice(0, 100));
+      const tips = mfList(ai.tips, 3);
+      const diet = mfList(ai.diet, 3);
+      const supplements = mfList(ai.supplements, 2);
+      const exercise = mfList(ai.exercise, 3);
       const { data, error } = await mfDb.from("mf_health_checks").insert({
-        line_user_id: uid, month, total: Math.round(total), summary, scores: { scores, notes, tips, summary },
+        line_user_id: uid, month, total: Math.round(total), summary, scores: { scores, notes, tips, summary, diet, supplements, exercise },
       }).select().single();
       if (error) return mfJson({ error: "本月已完成檢測" }, 409);
       return mfJson({ record: data });

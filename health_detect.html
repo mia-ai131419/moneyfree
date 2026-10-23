@@ -37,8 +37,12 @@
       <p id="mf_summary" style="text-align:left"></p>
     </div>
     <div class="mf-card"><h2>15 項觀察</h2><div id="mf_items"></div></div>
-    <div class="mf-card"><h2>生活建議</h2><ul id="mf_tips"></ul>
-      <div class="mf-disclaimer">本報告為外觀觀察,僅供健康參考,不能取代醫師診斷;如有不適或急症請立即就醫。下次檢測:下個月。</div>
+    <div class="mf-card"><h2>生活建議</h2><ul id="mf_tips"></ul></div>
+    <div class="mf-card" id="mf_improve"><h2>健康改善建議</h2>
+      <h3 class="mf-sub-h">🥗 飲食建議</h3><ul id="mf_diet"></ul>
+      <h3 class="mf-sub-h">💊 營養補充品</h3><ul id="mf_supplements"></ul>
+      <h3 class="mf-sub-h">🏃 運動建議</h3><ul id="mf_exercise"></ul>
+      <div class="mf-disclaimer">本報告為外觀觀察,僅供健康參考,不能取代醫師診斷;營養補充品使用前請先諮詢醫師或藥師,如有不適或急症請立即就醫。下次檢測:下個月。</div>
     </div>
     <button class="mf-btn mf-ghost" style="margin-top:14px" onclick="mfClose()">關閉</button>
   </div>
@@ -64,7 +68,13 @@ function mfRenderReport(mfRec) {
       <div class="mf-bar"><i style="width:${v}%"></i></div>
       <div class="mf-bar-note">${mfEsc(mfS.notes?.[k] || '')}</div></div>`;
   }).join('');
+  const mfList = (id, arr) => {
+    const el = document.getElementById(id);
+    el.innerHTML = (arr || []).map((t) => `<li>${mfEsc(t)}</li>`).join('');
+    el.previousElementSibling.classList.toggle('mf-hidden', !(arr || []).length);
+  };
   document.getElementById('mf_tips').innerHTML = (mfS.tips || []).map((t) => `<li>${mfEsc(t)}</li>`).join('');
+  mfList('mf_diet', mfS.diet); mfList('mf_supplements', mfS.supplements); mfList('mf_exercise', mfS.exercise);
   mfShow('mf_intro', false); mfShow('mf_loading', false); mfShow('mf_report');
 }
 

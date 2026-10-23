@@ -98,3 +98,6 @@ label.mf-field { display: block; margin: 12px 0 0; font-size: 14px; font-weight:
   display: block; padding: 14px; margin-top: 10px; border-radius: 12px; background: var(--mf-blue-soft);
   color: var(--mf-blue); text-decoration: none; font-weight: 700;
 }
+.mf-sub-h { font-size: 15px; margin: 14px 0 4px; color: var(--mf-gold-dark); }
+.mf-card ul { padding-left: 20px; margin: 4px 0; }
+.mf-card li { margin: 4px 0; }
