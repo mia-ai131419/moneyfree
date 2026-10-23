@@ -11,6 +11,7 @@ export const MF_HELP_TEXT = `【擁有者指令】
 ・直接輸入問題:AI 金融助理
 ・圖文 需求:AI 生成正方形圖片
 ・直接貼網址(或 圖文 網址 需求):讀取網頁內容後生成圖片
+・圖片修改 需求:修改上一張產生的圖片
 ・傳照片:暫存要群發的照片(最多 4 張)
 ・群發 文字:預覽群發內容(要以「群發」開頭)
 ・確認群發 / 取消群發
@@ -33,7 +34,28 @@ async function mfStoreForLine(prefix: string, bytes: Uint8Array, contentType: st
   return { url, preview };
 }
 
-async function mfOpenAIImage(prompt: string) {
+// 修改既有圖片:OpenAI images/edits(multipart)
+async function mfOpenAIEdit(prompt: string, source: Uint8Array) {
+  const form = new FormData();
+  form.append("model", MF_IMAGE_MODEL);
+  form.append("prompt", prompt);
+  const isPng = source[0] === 0x89 && source[1] === 0x50; // PNG 檔頭
+  form.append("image", new Blob([source], { type: isPng ? "image/png" : "image/jpeg" }), isPng ? "source.png" : "source.jpg");
+  form.append("size", "1024x1024");
+  form.append("quality", "high");
+  form.append("output_format", "jpeg");
+  const r = await fetch("https://api.openai.com/v1/images/edits", {
+    method: "POST", headers: { Authorization: `Bearer ${MF_OPENAI_KEY}` }, body: form,
+  });
+  const d = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(d?.error?.message || `OpenAI 錯誤(${r.status})`);
+  const b64 = d?.data?.[0]?.b64_json;
+  if (!b64) throw new Error("沒有取得圖片");
+  return { bytes: Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)), contentType: "image/jpeg" };
+}
+
+async function mfOpenAIImage(prompt: string, editSource?: Uint8Array) {
+  if (editSource) return await mfOpenAIEdit(prompt, editSource);
   const call = (body: Record<string, unknown>) => fetch("https://api.openai.com/v1/images/generations", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${MF_OPENAI_KEY}` },
@@ -55,9 +77,11 @@ async function mfOpenAIImage(prompt: string) {
   return { bytes: Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)), contentType };
 }
 
-async function mfGenerateAndSend(replyToken: string, userId: string, prompt: string, prefix: string, caption: string) {
+async function mfGenerateAndSend(
+  replyToken: string, userId: string, prompt: string, prefix: string, caption: string, editSource?: Uint8Array,
+) {
   try {
-    const { bytes, contentType } = await mfOpenAIImage(prompt);
+    const { bytes, contentType } = await mfOpenAIImage(prompt, editSource);
     const { url, preview } = await mfStoreForLine(`${prefix}/${mfStamp()}`, bytes, contentType);
     await mfReplyOrPush(replyToken, userId, [mfImage(url, preview), mfText(caption)]);
     return url;
@@ -140,8 +164,28 @@ export function mfOwnerCommand(ev: Record<string, any>, ownerId: string, text: s
       await mfShowLoading(ownerId);
       const plan = await mfPlanImage(request);
       if (!plan.ok) { await mfReplyOrPush(token, ownerId, [mfText(`無法產生圖片:${plan.reason}`)]); return; }
-      const caption = `圖片完成 ✅${plan.title ? `\n標題:${plan.title}` : ""}${plan.source ? `\n來源:${plan.source}` : ""}\n長按可儲存或轉傳`;
-      await mfGenerateAndSend(token, ownerId, plan.prompt, "gen", caption);
+      const caption = `圖片完成 ✅${plan.title ? `\n標題:${plan.title}` : ""}${plan.source ? `\n來源:${plan.source}` : ""}` +
+        `${plan.notice ? `\n\n⚠️ 提醒:${plan.notice}` : ""}\n\n要調整請輸入「圖片修改 需求」\n長按可儲存或轉傳`;
+      const url = await mfGenerateAndSend(token, ownerId, plan.prompt, "gen", caption);
+      if (url) await mfDb.from("mf_image_logs").insert({ owner_id: ownerId, url, request });
+    })();
+  }
+
+  if (text.startsWith("圖片修改") || text.startsWith("修改圖片")) {
+    const request = text.slice(4).trim();
+    if (!request) return mfReply(token, "請在「圖片修改」後面寫要改什麼,例如:圖片修改 背景換成夜景、標題改成「理財講座」");
+    return (async () => {
+      const { data: last } = await mfDb.from("mf_image_logs").select("url").eq("owner_id", ownerId)
+        .order("created_at", { ascending: false }).limit(1).maybeSingle();
+      if (!last) { await mfReply(token, "還沒有可以修改的圖片,請先用「圖文 需求」產生一張。"); return; }
+      await mfShowLoading(ownerId);
+      const src = await fetch(last.url);
+      if (!src.ok) { await mfReplyOrPush(token, ownerId, [mfText("找不到上一張圖片,請重新產生。")]); return; }
+      const prompt = `Edit this image according to the request below. Keep the overall layout, style and anything not mentioned unchanged. ` +
+        `Any Chinese text must be correct, clear Traditional Chinese; do not add extra small text.\nRequest: ${request}`;
+      const caption = "圖片修改完成 ✅\n可以繼續輸入「圖片修改 需求」再調整\n長按可儲存或轉傳";
+      const url = await mfGenerateAndSend(token, ownerId, prompt, "gen", caption, new Uint8Array(await src.arrayBuffer()));
+      if (url) await mfDb.from("mf_image_logs").insert({ owner_id: ownerId, url, request: `修改:${request}` });
     })();
   }
 
