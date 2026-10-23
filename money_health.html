@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>財務健康度檢測</title>
-<link rel="stylesheet" href="assets/mf_style.css?v=20261023b">
+<link rel="stylesheet" href="assets/mf_style.css?v=20261023c">
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
-<script src="assets/mf_common.js?v=20261023b"></script>
-<script src="assets/mf_quiz_data.js?v=20261023b"></script>
+<script src="assets/mf_common.js?v=20261023c"></script>
+<script src="assets/mf_quiz_data.js?v=20261023c"></script>
 </head>
 <body>
 <div class="mf-wrap">
@@ -46,9 +46,7 @@
     </div>
     <div class="mf-card"><h2>五力雷達圖</h2><canvas id="mf_chart" height="280"></canvas><div id="mf_dimbars"></div></div>
     <div class="mf-card"><h2>給你的建議</h2><ul id="mf_tips"></ul>
-      <div class="mf-disclaimer">本測驗為財務健康自我檢視,不構成投資建議。想進一步規劃,歡迎點選「聯絡專員」。</div>
-    </div>
-    <div class="mf-card"><h2>72 法則:資產多久翻倍?</h2>
+      <h2 class="mf-rule72-title">資產多久翻倍</h2>
       <div class="mf-rule72">
         <div class="mf-rule72-row"><span>年化報酬率</span><b id="mf_rate_val">6%</b></div>
         <input type="range" id="mf_rate" min="1" max="20" step="1" value="6" aria-label="年化報酬率">
@@ -58,6 +56,7 @@
         <p class="mf-note" id="mf_rule72_formula">72 ÷ 6 = 12 年</p>
       </div>
       <p class="mf-plan-copy">透過優質的理財商品,可以幫自己用更短的時間翻倍資產</p>
+      <div class="mf-disclaimer">本測驗為財務健康自我檢視,不構成投資建議。想進一步規劃,歡迎點選「聯絡專員」。</div>
     </div>
     <div class="mf-card"><h2>財務規劃後的你</h2>
       <canvas id="mf_plan_chart" height="280"></canvas>
@@ -162,7 +161,7 @@ const mfStartQuiz = () => {
 };
 document.getElementById('mf_go').onclick = mfStartQuiz;
 document.getElementById('mf_retry').onclick = mfStartQuiz;
-// 72 法則:翻倍年數 ≈ 72 ÷ 年化報酬率(%)
+// 翻倍年數(72 法則) ≈ 72 ÷ 年化報酬率(%)
 function mfUpdateRule72() {
   const rate = Number(document.getElementById('mf_rate').value);
   const years = 72 / rate;

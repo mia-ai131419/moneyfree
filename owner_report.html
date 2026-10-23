@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>使用者財務健康度表格</title>
+<link rel="stylesheet" href="assets/mf_style.css?v=20261023c">
+<script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+<script src="assets/mf_common.js?v=20261023c"></script>
+<script src="assets/mf_quiz_data.js?v=20261023c"></script>
+<style>
+  .mf-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .mf-stat { background: var(--mf-blue-soft); border-radius: 12px; padding: 12px; text-align: center; }
+  .mf-stat b { display: block; font-size: 28px; color: var(--mf-gold-dark); }
+  .mf-stat span { font-size: 12px; color: var(--mf-muted); }
+  .mf-dist-row { display: grid; grid-template-columns: 74px 1fr 40px; align-items: center; gap: 8px; margin: 8px 0; font-size: 13px; }
+  .mf-dist-bar { height: 18px; background: var(--mf-blue-soft); border-radius: 6px; overflow: hidden; }
+  .mf-dist-bar > i { display: block; height: 100%; background: linear-gradient(90deg, #dcbc4a, var(--mf-gold-dark)); }
+  .mf-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; margin: 0 -6px; }
+  .mf-table { border-collapse: collapse; width: 100%; min-width: 520px; font-size: 13px; }
+  .mf-table th, .mf-table td { padding: 8px 6px; border-bottom: 1px solid var(--mf-line); text-align: center; white-space: nowrap; }
+  .mf-table th { background: var(--mf-blue-soft); color: var(--mf-blue); position: sticky; top: 0; cursor: pointer; }
+  .mf-table td:first-child, .mf-table th:first-child { text-align: left; position: sticky; left: 0; background: #fff; }
+  .mf-table th:first-child { background: var(--mf-blue-soft); }
+  .mf-table .mf-total { font-weight: 800; color: var(--mf-gold-dark); }
+</style>
+</head>
+<body>
+<div class="mf-wrap">
+  <div class="mf-header">
+    <div class="mf-brand">MONEYFREE · 擁有者專用</div>
+    <h1 class="mf-title">使用者財務健康度表格</h1>
+    <p class="mf-sub">每位使用者最新一次的財務健康度測驗</p>
+  </div>
+  <div id="mf_loading" class="mf-loading"><div class="mf-spinner"></div>載入中…</div>
+  <div id="mf_err" class="mf-card mf-error mf-hidden"></div>
+
+  <div id="mf_report" class="mf-hidden">
+    <div class="mf-card">
+      <div class="mf-stats">
+        <div class="mf-stat"><b id="mf_count">0</b><span>已測驗人數</span></div>
+        <div class="mf-stat"><b id="mf_avg">0</b><span>平均總分</span></div>
+      </div>
+    </div>
+    <div class="mf-card"><h2>總分分佈</h2><div id="mf_dist"></div></div>
+    <div class="mf-card"><h2>五力平均</h2><div id="mf_dimavg"></div></div>
+    <div class="mf-card"><h2>使用者明細</h2>
+      <p class="mf-note">點欄位標題可排序;表格可左右滑動</p>
+      <div class="mf-table-wrap"><table class="mf-table"><thead id="mf_thead"></thead><tbody id="mf_tbody"></tbody></table></div>
+    </div>
+    <button class="mf-btn mf-ghost" style="margin-top:14px" onclick="mfClose()">關閉</button>
+  </div>
+</div>
+<script>
+const MF_BANDS = [[80, 100, '80–100'], [60, 79, '60–79'], [40, 59, '40–59'], [0, 39, '0–39']];
+let mfRows = []; let mfSort = { key: 'total', dir: -1 };
+
+function mfBar(label, value, max, text) {
+  const w = max ? Math.round((value / max) * 100) : 0;
+  return `<div class="mf-dist-row"><span>${label}</span><div class="mf-dist-bar"><i style="width:${w}%"></i></div><b>${text}</b></div>`;
+}
+
+function mfRenderTable() {
+  const MF_SHORT = { flex: '彈性', stress: '抗壓', ret: '回報', health: '健康', growth: '成長' };
+  const cols = [['name', '使用者'], ['total', '總分'], ['persona', '性格'], ...MF_DIMS.map(([k]) => [k, MF_SHORT[k]]), ['at', '測驗日期'], ['times', '次數']];
+  document.getElementById('mf_thead').innerHTML = `<tr>${cols.map(([k, l]) =>
+    `<th data-k="${k}">${l}${mfSort.key === k ? (mfSort.dir < 0 ? ' ▼' : ' ▲') : ''}</th>`).join('')}</tr>`;
+  const val = (r, k) => (MF_DIMS.some(([d]) => d === k) ? Number(r.dims?.[k]) || 0 : r[k]);
+  const rows = [...mfRows].sort((a, b) => {
+    const x = val(a, mfSort.key); const y = val(b, mfSort.key);
+    return (x > y ? 1 : x < y ? -1 : 0) * mfSort.dir;
+  });
+  document.getElementById('mf_tbody').innerHTML = rows.map((r) => `<tr>
+    <td>${mfEsc(r.name)}</td><td class="mf-total">${r.total}</td><td>${mfEsc(r.persona)}</td>
+    ${MF_DIMS.map(([k]) => `<td>${Number(r.dims?.[k]) || 0}</td>`).join('')}
+    <td>${new Date(r.at).toLocaleDateString('zh-TW')}</td><td>${r.times}</td></tr>`).join('');
+}
+
+function mfRender(rows) {
+  mfRows = rows;
+  const n = rows.length;
+  document.getElementById('mf_count').textContent = n;
+  document.getElementById('mf_avg').textContent = n ? Math.round(rows.reduce((s, r) => s + r.total, 0) / n) : '-';
+  const counts = MF_BANDS.map(([lo, hi]) => rows.filter((r) => r.total >= lo && r.total <= hi).length);
+  const maxC = Math.max(1, ...counts);
+  document.getElementById('mf_dist').innerHTML = MF_BANDS.map(([, , label], i) => mfBar(label + ' 分', counts[i], maxC, `${counts[i]} 人`)).join('');
+  document.getElementById('mf_dimavg').innerHTML = MF_DIMS.map(([k, label]) => {
+    const avg = n ? Math.round(rows.reduce((s, r) => s + (Number(r.dims?.[k]) || 0), 0) / n) : 0;
+    return mfBar(label.replace('程度', '').replace('度', ''), avg, 100, avg);
+  }).join('');
+  mfRenderTable();
+  mfShow('mf_loading', false); mfShow('mf_report');
+}
+
+document.getElementById('mf_thead').onclick = (e) => {
+  const k = e.target.closest('th')?.dataset.k;
+  if (!k) return;
+  mfSort = { key: k, dir: mfSort.key === k ? -mfSort.dir : -1 };
+  mfRenderTable();
+};
+
+(async () => {
+  try {
+    await mfInit(MF_CONFIG.liffFull);
+    const r = await mfApi('owner_quiz_report');
+    if (r.mfPreview) {
+      mfRender([
+        { name: '預覽 A', total: 82, persona: '財務領航者', dims: { flex: 85, stress: 80, ret: 78, health: 84, growth: 83 }, at: new Date().toISOString(), times: 2 },
+        { name: '預覽 B', total: 55, persona: '潛力探索者', dims: { flex: 60, stress: 50, ret: 40, health: 62, growth: 63 }, at: new Date().toISOString(), times: 1 },
+        { name: '預覽 C', total: 33, persona: '重新起步者', dims: { flex: 30, stress: 35, ret: 20, health: 40, growth: 40 }, at: new Date().toISOString(), times: 1 },
+      ]);
+      return;
+    }
+    mfRender(r.rows || []);
+  } catch (err) {
+    mfShow('mf_loading', false);
+    const el = document.getElementById('mf_err'); el.textContent = err.message; el.classList.remove('mf-hidden');
+  }
+})();
+</script>
+</body>
+</html>

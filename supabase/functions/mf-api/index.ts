@@ -166,6 +166,25 @@ async function mfHandle(action: string, body: Record<string, unknown>, user: { u
       if (error) return mfJson({ error: "儲存失敗" }, 500);
       return mfJson({ ok: true });
     }
+    case "owner_quiz_report": {
+      // 擁有者專用:所有使用者最新一次財務測驗分數與分佈
+      const { data: me } = await mfDb.from("mf_users").select("is_owner").eq("line_user_id", uid).maybeSingle();
+      if (!me?.is_owner) return mfJson({ error: "只有帳號擁有者可以查看" }, 403);
+      const [{ data: quizzes }, { data: users }] = await Promise.all([
+        mfDb.from("mf_money_quiz").select("line_user_id,dims,persona,created_at").order("created_at", { ascending: false }).limit(2000),
+        mfDb.from("mf_users").select("line_user_id,display_name"),
+      ]);
+      const nameOf = new Map((users || []).map((u) => [u.line_user_id, u.display_name || u.line_user_id.slice(-6)]));
+      const latest = new Map<string, { name: string; dims: Record<string, number>; total: number; persona: string; at: string; times: number }>();
+      for (const q of quizzes || []) {
+        const prev = latest.get(q.line_user_id);
+        if (prev) { prev.times += 1; continue; } // 依時間新到舊,第一筆即最新
+        const dims = q.dims as Record<string, number>;
+        const total = Math.round(MF_DIM_KEYS.reduce((sum, k) => sum + (Number(dims?.[k]) || 0), 0) / MF_DIM_KEYS.length);
+        latest.set(q.line_user_id, { name: nameOf.get(q.line_user_id) || q.line_user_id.slice(-6), dims, total, persona: q.persona || "", at: q.created_at, times: 1 });
+      }
+      return mfJson({ rows: [...latest.values()].sort((x, y) => y.total - x.total) });
+    }
     default:
       return mfJson({ error: "未知的操作" }, 400);
   }

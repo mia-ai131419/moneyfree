@@ -5,6 +5,7 @@ import { MF_MAX_IMAGES, mfBroadcastConfirm, mfBroadcastPreview, mfClearDraft, mf
 import { mfAskImageChoice, mfComposeImage, mfGetState } from "./mf_compose.ts";
 
 const MF_OPENAI_KEY = Deno.env.get("OPENAI_API_KEY") || "";
+const MF_LIFF_FULL = "2011977982-Oqw2Ao0M";
 export const MF_HELP_TEXT = `【擁有者指令】
 ・直接輸入問題:AI 金融助理
 ・圖文 需求:選擇「群發」(產生圖文後預覽群發)或「修改圖文」(上傳 1–4 張照片整合成專業圖文)
@@ -14,6 +15,7 @@ export const MF_HELP_TEXT = `【擁有者指令】
 ・傳照片:暫存要群發的照片(最多 4 張)
 ・群發 文字:預覽群發內容(要以「群發」開頭)
 ・確認群發 / 取消群發
+・財務表格:查看所有使用者財務健康度分數與分佈
 ・設計 需求(可省略):AI 產生介面配色模板
 ・更新選單:重新上傳圖文選單`;
 
@@ -65,6 +67,9 @@ export async function mfOwnerImage(ev: Record<string, any>, ownerId: string) {
 export function mfOwnerCommand(ev: Record<string, any>, ownerId: string, text: string): Promise<unknown> | null {
   const token = ev.replyToken as string;
   if (text === "指令" || text === "說明") return mfReply(token, MF_HELP_TEXT);
+  if (text === "財務表格" || text === "財務健康度表格") {
+    return mfReply(token, `【使用者財務健康度表格】(僅擁有者可開啟)\nhttps://liff.line.me/${MF_LIFF_FULL}/owner_report.html`);
+  }
 
   const isUrlOnly = /^https?:\/\/\S+$/i.test(text); // 只貼網址也視為「圖文」
   if (text.startsWith("圖文") || isUrlOnly) {

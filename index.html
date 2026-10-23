@@ -4,9 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>MoneyFree 財務服務</title>
-<link rel="stylesheet" href="assets/mf_style.css?v=20261023b">
+<link rel="stylesheet" href="assets/mf_style.css?v=20261023c">
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-<script src="assets/mf_common.js?v=20261023b"></script>
+<script src="assets/mf_common.js?v=20261023c"></script>
 </head>
 <body>
 <div class="mf-wrap">
@@ -30,14 +30,14 @@
 (async () => {
   document.getElementById('mf_contact').href = MF_CONFIG.contactUrl;
   const mfState = new URLSearchParams(location.search).get('liff.state') || '';
-  const mfAllowed = ['health_detect.html', 'money_health.html', 'personal_info.html'];
+  const mfAllowed = ['health_detect.html', 'money_health.html', 'personal_info.html', 'owner_report.html'];
   const mfTarget = mfAllowed.find((p) => mfState.includes(p));
   if (!mfTarget || typeof liff === 'undefined') {
     mfShow('mf_router', false); mfShow('mf_menu');
     return;
   }
   try {
-    const mfId = mfTarget === 'personal_info.html' ? MF_CONFIG.liffFull : MF_CONFIG.liffHalf;
+    const mfId = ['personal_info.html', 'owner_report.html'].includes(mfTarget) ? MF_CONFIG.liffFull : MF_CONFIG.liffHalf;
     await liff.init({ liffId: mfId }); // 初始化後 LIFF 會自動導向 liff.state 指定的頁面
   } catch (e) {
     location.replace(mfTarget);
